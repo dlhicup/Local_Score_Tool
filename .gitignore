@@ -1,10 +1,12 @@
-# The tool imports videos from disk and writes GT beside them — none of that
-# belongs in the repo.
+node_modules/
+dist/
+
+# videos + GT are imported/written on disk, never committed
 *.mp4
 *.webm
 *.mov
 *.mkv
 *.m4v
 groundtruth/
-*.session
 .DS_Store
+*.log

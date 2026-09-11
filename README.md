@@ -1,32 +1,47 @@
 # Local Score Tool
 
-A fully offline, single-file version of the Score GT annotate workspace. It
-does **not** store or serve videos — you import a clip straight from local
-disk, annotate it, and save the ground truth as `videoname.json` in the exact
-same format the hosted platform produces.
+A standalone **React** application for generating football ground truth from
+local video — the Score GT annotate workspace, rebuilt as its own project with
+no server and no stored video. You import a clip straight from disk (it never
+uploads, so scrubbing is instant), annotate it, and save the ground truth as
+`videoname.json` in the platform's exact format.
+
+## Stack
+
+Vite 5 · React 18 · Tailwind 3 · Zustand 5 · Framer Motion · lucide-react —
+the same stack as the hosted platform. No backend.
+
+## Run it
+
+```bash
+npm install
+npm run dev        # http://localhost:9070
+```
+
+Or build a static bundle:
+
+```bash
+npm run build      # -> dist/
+npm run preview
+```
 
 ## Use it
 
-Open `index.html` in a browser (Chrome/Edge recommended — see *Saving* below).
-No install, no server, no internet needed.
-
-1. **Drop a video** onto the window, or click **Choose video…**. The clip plays
-   straight from disk — nothing is uploaded, and scrubbing is instant.
-2. **Annotate**: press an action's hotkey at the playhead, or right-click the
-   video / timeline for the action menu. Drag a marker to retime it; ⇧-drag the
+1. **Drop a video** onto the window, or click **Choose video…**. It plays
+   straight from disk — nothing is uploaded.
+2. **Annotate**: press an action's hotkey at the playhead, right-click the
+   video or timeline for the action menu, drag a marker to retime, ⇧-drag the
    timeline to select a span.
 3. **Save GT** (or `Ctrl+S`) writes `videoname.json`.
 
-## Saving — two modes
+### Saving — two modes
 
-- **Chrome / Edge:** click **Output folder…** once to pick a destination
-  folder. Every Save then writes `videoname.json` straight into it, exactly
-  like the platform writing to `groundtruth/`.
-- **Any browser / no folder chosen:** Save downloads `videoname.json` to your
-  Downloads folder.
+- **Chrome / Edge:** click **Output folder…** once to pick a destination; every
+  Save then writes `videoname.json` straight into it, like the platform writing
+  to `groundtruth/`.
+- **Any browser / no folder chosen:** Save downloads `videoname.json`.
 
-To keep working on a clip later, load its video again and use **Load GT** to
-re-import the saved `videoname.json`.
+Use **Load GT** to re-import a saved file and keep working on a clip.
 
 ## Output format
 
@@ -36,24 +51,21 @@ sorted by frame:
 ```json
 {"groundtruth":[
   {"frame":50,"action":"pass"},
-  {"frame":275,"action":"tackle"},
+  {"frame":277,"action":"tackle"},
   {"frame":448,"action":"goal"}
 ]}
 ```
 
-`frame = round(seconds × 25)`. Timestamps in seconds are the internal source of
-truth; frames are computed only at save time.
+`frame = round(seconds × 25)`. Seconds are the internal source of truth; frames
+are derived only at save time. The `fps`, `labels`, `format`, `useHotkeys` and
+`videoRef` modules under `src/lib/` are shared verbatim with the hosted
+platform, so the numbers match exactly.
 
-## The 15 action types (and default keys)
+## The 15 action types (default keys)
 
-| key | action | key | action | key | action |
-|-----|--------|-----|--------|-----|--------|
-| q | pass | u | clearance | d | save |
-| w | pass_received | i | take_on | f | foul |
-| e | recovery | o | substitution | g | goal |
-| r | tackle | p | block | | |
-| t | interception | a | aerial_duel | | |
-| y | ball_out_of_play | s | shot | | |
+`q` pass · `w` pass_received · `e` recovery · `r` tackle · `t` interception ·
+`y` ball_out_of_play · `u` clearance · `i` take_on · `o` substitution ·
+`p` block · `a` aerial_duel · `s` shot · `d` save · `f` foul · `g` goal
 
 ## Keyboard
 
@@ -65,6 +77,7 @@ truth; frames are computed only at save time.
 | letter keys | add that action at the playhead |
 | right-click | action menu at that point |
 | `Del` / `Backspace` | delete selected action(s) |
+| `⇧`-drag timeline | select a span |
 | `+` `−` `0` | zoom picture · drag to pan · wheel over it |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | undo / redo |
 | `Ctrl+S` | save ground truth |
