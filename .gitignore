@@ -1,0 +1,10 @@
+# The tool imports videos from disk and writes GT beside them — none of that
+# belongs in the repo.
+*.mp4
+*.webm
+*.mov
+*.mkv
+*.m4v
+groundtruth/
+*.session
+.DS_Store
