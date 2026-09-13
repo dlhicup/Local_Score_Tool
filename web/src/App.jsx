@@ -6,9 +6,8 @@ import Toasts from './components/Toasts';
 import Library from './pages/Library';
 import Review from './pages/Review';
 import Settings from './pages/Settings';
-import Login from './pages/Login';
 import Users from './pages/Users';
-import Exam from './pages/Exam';
+import EventsGuide from './pages/EventsGuide';
 import Reviewer from './pages/Reviewer';
 import { useStore } from './store/useStore';
 import { isManager } from './lib/roles';
@@ -45,14 +44,6 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return (
-      <>
-        <Login />
-        <Toasts />
-      </>
-    );
-  }
 
   return (
     <>
@@ -70,7 +61,7 @@ export default function App() {
             <Route path="/p/:id/review" element={<Navigate to="../annotate" replace />} />
             <Route path="/p/:id/extract" element={<Navigate to="../annotate" replace />} />
             <Route path="/users" element={<ManagerOnly><Users /></ManagerOnly>} />
-            <Route path="/exam" element={<Exam />} />
+            <Route path="/guide" element={<EventsGuide />} />
             <Route path="/review" element={<AdminOnly><Reviewer /></AdminOnly>} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />

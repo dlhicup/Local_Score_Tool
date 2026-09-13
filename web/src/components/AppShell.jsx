@@ -1,6 +1,6 @@
 import { NavLink, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, LogOut, Undo2, Redo2, Trash2, GraduationCap, CheckCircle2 } from 'lucide-react';
+import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, CheckCircle2 } from 'lucide-react';
 import Logo from './Logo';
 import { useStore } from '../store/useStore';
 import { isManager } from '../lib/roles';
@@ -50,7 +50,6 @@ export default function AppShell({ children }) {
   const save = useStore((s) => s.saveProject);
   const saveAndAdvance = useStore((s) => s.saveAndAdvance);
   const user = useStore((s) => s.user);
-  const signOut = useStore((s) => s.signOut);
   const headerDelete = useStore((s) => s.headerDelete);
   const saved = useStore((s) => s.saved);
   const undo = useStore((s) => s.undo);
@@ -72,18 +71,11 @@ export default function AppShell({ children }) {
         </NavLink>
         <RailLink to="/" icon={LayoutGrid} label="Library" />
         <RailLink to={pid ? `/p/${pid}/annotate` : '#'} icon={ClipboardCheck} label="Annotate" disabled={!pid} />
-        <RailLink to="/exam" icon={GraduationCap} label="Reference ground truth" />
+        <RailLink to="/guide" icon={BookOpen} label="Events guide" />
         {isAdmin && <RailLink to="/review" icon={CheckCircle2} label="Review" />}
         <div className="flex-1" />
         {manager && <RailLink to="/users" icon={Users2} label="Users & assignments" />}
         <RailLink to="/settings" icon={Settings2} label="Settings" />
-        <button
-          onClick={signOut}
-          title={`Sign out — ${user?.username}`}
-          className="mt-1 flex h-11 w-11 items-center justify-center rounded-xl text-ink-500 transition hover:bg-white/[0.06] hover:text-avoid-500"
-        >
-          <LogOut size={18} />
-        </button>
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
