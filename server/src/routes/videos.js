@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import fs from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listProjects, readProject, writeProject, emptyProject, idForVideo } from '../services/store.js';
@@ -46,6 +46,38 @@ const MIME = {
  * if one exists. The join is by filename — that is the stable identifier here,
  * since the clips arrive already named by content hash.
  */
+/**
+ * Import a video into the shared folder. The file is streamed straight to disk
+ * (no buffering, no upload-size middleware to trip over), named by the client
+ * filename but confined to the video directory. Overwriting an existing name is
+ * refused so one member cannot silently replace another's clip.
+ */
+router.post('/videos/upload', requireAuth, async (req, res, next) => {
+  const name = path.basename(String(req.query.name || ''));
+  const full = resolveVideo(name);
+  if (!full) return res.status(400).json({ error: 'Not a video filename (mp4, webm, mov, mkv, m4v)' });
+  try {
+    if (await fs.access(full).then(() => true, () => false)) {
+      return res.status(409).json({ error: `A clip named ${name} already exists` });
+    }
+    const tmp = `${full}.uploading`;
+    await new Promise((resolve, reject) => {
+      const ws = createWriteStream(tmp);
+      req.on('error', reject);
+      ws.on('error', reject);
+      ws.on('finish', resolve);
+      req.pipe(ws);
+    });
+    const stat = await fs.stat(tmp);
+    if (stat.size < 1024) { await fs.unlink(tmp).catch(() => {}); return res.status(400).json({ error: 'Upload was empty' }); }
+    await fs.rename(tmp, full);
+    res.status(201).json({ name, size: stat.size });
+  } catch (err) {
+    await fs.unlink(`${full}.uploading`).catch(() => {});
+    next(err);
+  }
+});
+
 router.get('/videos', requireAuth, async (req, res, next) => {
   try {
     const allowed = await visibleTo(req.user);

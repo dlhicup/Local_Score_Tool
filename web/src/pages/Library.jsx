@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search, CheckCircle2, Circle, Film,
-  ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight,
+  ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { api } from '../lib/api';
@@ -100,6 +100,8 @@ export default function Library() {
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(null); // {name, pct} while importing
+  const fileInput = useRef(null);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [opening, setOpening] = useState(null);
@@ -120,6 +122,21 @@ export default function Library() {
     if (n <= 1) next.delete('page');
     else next.set('page', String(n));
     setParams(next, { replace: true });
+  };
+
+  const importVideo = async (file) => {
+    if (!file) return;
+    if (!/\.(mp4|webm|mov|mkv|m4v)$/i.test(file.name)) return toast('Pick a video file (mp4, webm, mov, mkv)', 'error');
+    setUploading({ name: file.name, pct: 0 });
+    try {
+      await api.uploadVideo(file, (f) => setUploading({ name: file.name, pct: Math.round(f * 100) }));
+      toast(`Imported ${file.name}`, 'success');
+      await load();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setUploading(null);
+    }
   };
 
   const load = useCallback(async () => {
@@ -194,9 +211,14 @@ export default function Library() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button onClick={() => fileInput.current?.click()} disabled={!!uploading} className="btn-ghost text-xs" title="Add a video to the shared folder">
+              {uploading ? <><Loader2 size={15} className="animate-spin" /> {uploading.pct}%</> : <><Upload size={15} /> Import video</>}
+            </button>
             <button onClick={load} className="btn-ghost px-2.5 py-2" title="Rescan the video folder">
               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             </button>
+            <input ref={fileInput} type="file" accept="video/*,.mp4,.webm,.mov,.mkv,.m4v" className="hidden"
+              onChange={(e) => { importVideo(e.target.files[0]); e.target.value = ''; }} />
             <button onClick={openNext} disabled={!s || s.total === 0} className="btn-primary text-xs">
               Next unlabelled <ArrowRight size={14} />
             </button>

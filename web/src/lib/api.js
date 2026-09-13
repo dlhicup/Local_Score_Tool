@@ -76,6 +76,22 @@ export const api = {
   exportUrl: (id, onlyAccepted) => `${BASE}/projects/${id}/export${onlyAccepted ? '?accepted=1' : ''}`,
 
   listVideos: () => request('/videos'),
+  uploadVideo: (file, onProgress) =>
+    new Promise((resolve, reject) => {
+      // XHR (not fetch) so upload progress is reportable.
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${BASE}/videos/upload?name=${encodeURIComponent(file.name)}`);
+      const tok = getToken();
+      if (tok) xhr.setRequestHeader('Authorization', `Bearer ${tok}`);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+      xhr.onload = () => {
+        let body = {}; try { body = JSON.parse(xhr.responseText); } catch { /* */ }
+        xhr.status >= 200 && xhr.status < 300 ? resolve(body) : reject(new Error(body.error || `Upload failed (${xhr.status})`));
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(file);
+    }),
 
   examList: () => request('/exam'),
   examEntry: (hash) => request(`/exam/${encodeURIComponent(hash)}`),
