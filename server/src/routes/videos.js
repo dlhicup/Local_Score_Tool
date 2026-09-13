@@ -3,8 +3,9 @@ import fs from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listProjects, readProject, writeProject, emptyProject, idForVideo } from '../services/store.js';
-import { getAssignments } from '../services/users.js';
+import { listProjects, readProject, writeProject, emptyProject, idForVideo, deleteProject } from '../services/store.js';
+import { getAssignments, assignClips } from '../services/users.js';
+import { removeGroundTruth } from '../services/gtfile.js';
 import { requireAuth } from '../middleware/auth.js';
 
 /**
@@ -46,6 +47,25 @@ const MIME = {
  * if one exists. The join is by filename — that is the stable identifier here,
  * since the clips arrive already named by content hash.
  */
+/**
+ * Remove a clip entirely: the video file, its ground truth (working record and
+ * the deliverable), and its assignment. Refuses a name outside the folder.
+ */
+router.delete('/videos/:name', requireAuth, async (req, res, next) => {
+  const name = path.basename(req.params.name);
+  const full = resolveVideo(name);
+  if (!full) return res.status(400).json({ error: 'Bad video name' });
+  try {
+    await fs.unlink(full).catch((e) => { if (e.code !== 'ENOENT') throw e; });
+    await deleteProject(idForVideo(name)).catch(() => {});
+    await removeGroundTruth(name).catch(() => {});
+    await assignClips([name], null).catch(() => {});
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * Import a video into the shared folder. The file is streamed straight to disk
  * (no buffering, no upload-size middleware to trip over), named by the client

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search, CheckCircle2, Circle, Film,
-  ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2,
+  ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2, Trash2,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { api } from '../lib/api';
@@ -30,7 +30,7 @@ function StatTile({ label, value, tone, active, onClick }) {
   );
 }
 
-function TaskRow({ v, onOpen }) {
+function TaskRow({ v, onOpen, onDelete }) {
   const s = STATUS[v.status];
   const Icon = s.icon;
   // A project with no events is not "0% reviewed" — there is nothing to review
@@ -88,7 +88,18 @@ function TaskRow({ v, onOpen }) {
         ))}
       </span>
 
-      <ArrowRight size={14} className="text-ink-700 transition group-hover:translate-x-0.5 group-hover:text-pitch-400" />
+      <span className="relative flex items-center justify-end">
+        <ArrowRight size={14} className="text-ink-700 transition group-hover:opacity-0" />
+        <span
+          role="button"
+          tabIndex={-1}
+          title={`Remove ${v.name}`}
+          onClick={(e) => { e.stopPropagation(); onDelete(v); }}
+          className="absolute inset-y-0 right-0 grid place-items-center rounded p-1 text-ink-600 opacity-0 transition hover:bg-avoid-500/15 hover:text-avoid-500 group-hover:opacity-100"
+        >
+          <Trash2 size={14} />
+        </span>
+      </span>
     </motion.button>
   );
 }
@@ -122,6 +133,18 @@ export default function Library() {
     if (n <= 1) next.delete('page');
     else next.set('page', String(n));
     setParams(next, { replace: true });
+  };
+
+  const deleteVideo = async (v) => {
+    const labeled = v.project?.eventCount ? ` and its ${v.project.eventCount} saved action${v.project.eventCount === 1 ? '' : 's'}` : '';
+    if (!window.confirm(`Remove ${v.name}${labeled}? This deletes the video file and its ground truth for everyone.`)) return;
+    try {
+      await api.deleteVideo(v.name);
+      toast(`Removed ${v.name}`, 'success');
+      await load();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   };
 
   const importVideo = async (file) => {
@@ -276,7 +299,7 @@ export default function Library() {
                 <p className="mt-1 font-mono text-2xs text-ink-600">{data?.dir}</p>
               </div>
             ) : (
-              pageItems.map((v) => <TaskRow key={v.name} v={v} onOpen={open} />)
+              pageItems.map((v) => <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} />)
             )}
           </div>
 

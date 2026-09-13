@@ -76,6 +76,7 @@ export const api = {
   exportUrl: (id, onlyAccepted) => `${BASE}/projects/${id}/export${onlyAccepted ? '?accepted=1' : ''}`,
 
   listVideos: () => request('/videos'),
+  deleteVideo: (name) => request(`/videos/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   uploadVideo: (file, onProgress) =>
     new Promise((resolve, reject) => {
       // XHR (not fetch) so upload progress is reportable.
