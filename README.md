@@ -1,84 +1,78 @@
-# Local Score Tool
+# Local Score Tool — team GT server
 
-A standalone **React** application for generating football ground truth from
-local video — the Score GT annotate workspace, rebuilt as its own project with
-no server and no stored video. You import a clip straight from disk (it never
-uploads, so scrubbing is instant), annotate it, and save the ground truth as
-`videoname.json` in the platform's exact format.
+A self-hostable local server for a small team (2–4 people) to generate football
+ground truth together. Same stack and workflow as the hosted Score GT platform —
+users, roles, clip assignments, a shared library, the annotate workspace, and
+ground truth saved centrally — but run on one machine on your own network, with
+videos read from a shared folder on the host.
+
+It has a **backend and a database**, because sharing users, assignments, and
+ground truth between people needs one shared source of truth. (A browser-only
+tool can't do that — its storage is private to each browser.)
 
 ## Stack
 
-Vite 5 · React 18 · Tailwind 3 · Zustand 5 · Framer Motion · lucide-react —
-the same stack as the hosted platform. No backend.
+- **Server:** Node + Express, file-based storage (users, assignments, ground
+  truth). No external database to install.
+- **Web:** Vite + React + Tailwind, served by the same server.
 
 ## Run it
 
 ```bash
-npm install
-npm run dev        # http://localhost:9070
+cp .env.example server/.env      # set ADMIN_PASSWORD and AUTH_SECRET
+npm install                      # installs server + web
+npm run build                    # build the web app
+npm start                        # serve on http://<host-ip>:9044
 ```
 
-Or build a static bundle:
+Members reach it at **`http://<host-ip>:9044`** on your LAN. On first start an
+admin account is created from `.env`.
 
-```bash
-npm run build      # -> dist/
-npm run preview
-```
+For development with hot reload: `npm run dev` (web on :5173, API on :8790).
 
-## Use it
+## The shared videos folder
 
-1. **Drop a video** onto the window, or click **Choose video…**. It plays
-   straight from disk — nothing is uploaded.
-2. **Annotate**: press an action's hotkey at the playhead, right-click the
-   video or timeline for the action menu, drag a marker to retime, ⇧-drag the
-   timeline to select a span.
-3. **Save GT** (or `Ctrl+S`) writes `videoname.json`.
+Drop the team's clips into **`video/`** on the host — `.mp4`, `.webm`, `.mov`,
+`.mkv`. They appear in the Library for everyone. Nothing is uploaded; the server
+reads them straight from that folder. Filenames are the clip identity, so keep
+them stable.
 
-### Saving — two modes
+## The workflow
 
-- **Chrome / Edge:** click **Output folder…** once to pick a destination; every
-  Save then writes `videoname.json` straight into it, like the platform writing
-  to `groundtruth/`.
-- **Any browser / no folder chosen:** Save downloads `videoname.json`.
+1. **Admin** signs in, opens **Users & assignments**, and creates a member
+   account for each teammate.
+2. Admin **assigns clips** to members (by range or selection). Each member sees
+   only what they're assigned.
+3. Members open a clip and **annotate** — hotkeys, a lane timeline, frame-by-
+   frame arrows (`←`/`→`), right-click to add, span-select, undo/redo.
+4. **Save** writes the ground truth centrally: a working record in `data/` and
+   the deliverable `videoname.json` in `groundtruth/`, in the exact format:
 
-Use **Load GT** to re-import a saved file and keep working on a clip.
+   ```json
+   {"groundtruth":[
+     {"frame":50,"action":"pass"},
+     {"frame":313,"action":"goal"}
+   ]}
+   ```
 
-## Output format
+   Frame numbers are on the fixed 25 fps reporting clock.
 
-Identical to the platform — frame numbers on the fixed 25 fps reporting clock,
-sorted by frame:
+## Config (`.env`)
 
-```json
-{"groundtruth":[
-  {"frame":50,"action":"pass"},
-  {"frame":277,"action":"tackle"},
-  {"frame":448,"action":"goal"}
-]}
-```
+| var | what |
+| --- | --- |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | the first admin, seeded once on an empty store |
+| `AUTH_SECRET` | signs session tokens — set a long random string so logins survive a restart (`openssl rand -base64 48`) |
+| `PORT` | the API (loopback) |
+| `PUBLIC_PORT` | the app, served to the team over the LAN (default 9044) |
+| `VIDEO_DIR` / `DATA_DIR` / `GT_DIR` | override the shared folders if you keep them elsewhere |
 
-`frame = round(seconds × 25)`. Seconds are the internal source of truth; frames
-are derived only at save time. The `fps`, `labels`, `format`, `useHotkeys` and
-`videoRef` modules under `src/lib/` are shared verbatim with the hosted
-platform, so the numbers match exactly.
+## What lives where
 
-## The 15 action types (default keys)
+- `video/` — the shared clips (host-local, not in git)
+- `data/` — users, assignments, working records, the session secret
+- `groundtruth/` — the deliverable `videoname.json` files
+- `server/`, `web/` — the app
 
-`q` pass · `w` pass_received · `e` recovery · `r` tackle · `t` interception ·
-`y` ball_out_of_play · `u` clearance · `i` take_on · `o` substitution ·
-`p` block · `a` aerial_duel · `s` shot · `d` save · `f` foul · `g` goal
-
-## Keyboard
-
-| key | does |
-|-----|------|
-| `Space` | play / pause |
-| `←` `→` | step one frame (25 fps grid) |
-| `⇧`+`←`/`→` | jump one second |
-| letter keys | add that action at the playhead |
-| right-click | action menu at that point |
-| `Del` / `Backspace` | delete selected action(s) |
-| `⇧`-drag timeline | select a span |
-| `+` `−` `0` | zoom picture · drag to pan · wheel over it |
-| `Ctrl+Z` / `Ctrl+Shift+Z` | undo / redo |
-| `Ctrl+S` | save ground truth |
-| `?` | shortcut help |
+Everything under `video/`, `data/`, and `groundtruth/` stays on the host and is
+kept out of the repo.

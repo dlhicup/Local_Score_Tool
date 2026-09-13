@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-950 text-ink-100 font-sans antialiased;
+    /* A faint pitch-green bloom at the top edge, so the app reads as "football"
+       before a single label is on screen. */
+    background-image: radial-gradient(ellipse 90% 55% at 50% -15%, rgba(34, 227, 125, 0.1), transparent 65%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-pitch-500/30 text-white;
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-pitch-500/70 ring-offset-2 ring-offset-ink-950;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-700;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-600;
+    background-clip: content-box;
+  }
+
+  input[type='range'] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-white/[0.07] bg-ink-850/80 backdrop-blur-xl;
+  }
+
+  .panel-inset {
+    @apply rounded-xl border border-white/[0.05] bg-ink-900/60;
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+           transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-primary {
+    @apply btn bg-pitch-500 text-ink-950 hover:bg-pitch-400 active:scale-[.98] shadow-glow;
+  }
+
+  .btn-ghost {
+    @apply btn border border-white/10 bg-white/[0.03] text-ink-200 hover:border-white/20 hover:bg-white/[0.07] hover:text-white active:scale-[.98];
+  }
+
+  .btn-danger {
+    @apply btn border border-avoid-500/30 bg-avoid-500/10 text-avoid-500 hover:bg-avoid-500/20 active:scale-[.98];
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-white/10 bg-ink-900/80 px-3.5 py-2.5 text-sm text-ink-100
+           placeholder:text-ink-400 transition focus:border-pitch-500/50 focus:bg-ink-900;
+  }
+
+  .label-text {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400;
+  }
+
+  .kbd {
+    @apply inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-white/15
+           bg-white/[0.06] px-1.5 font-mono text-[10px] font-semibold text-ink-300;
+  }
+
+  /* Diagonal hatch used behind the timeline to echo mown-pitch stripes. */
+  .pitch-stripes {
+    background-image: repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.022) 0px,
+      rgba(255, 255, 255, 0.022) 40px,
+      transparent 40px,
+      transparent 80px
+    );
+  }
+
+  .skeleton {
+    @apply bg-gradient-to-r from-ink-800 via-ink-700 to-ink-800 bg-[length:200%_100%] animate-shimmer;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

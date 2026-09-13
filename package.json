@@ -2,26 +2,12 @@
   "name": "local-score-tool",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
-  "description": "Offline React tool to generate football ground truth from local video, in the Score GT format.",
+  "description": "Self-hostable local Score GT server for a small team — shared videos, users, assignments, and ground truth.",
+  "workspaces": ["server", "web"],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "npm -w web run build",
+    "start": "npm -w server run start",
+    "dev": "concurrently -n server,web -c green,cyan \"npm -w server run dev\" \"npm -w web run dev\""
   },
-  "dependencies": {
-    "clsx": "^2.1.1",
-    "framer-motion": "^11.11.17",
-    "lucide-react": "^0.460.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "zustand": "^5.0.1"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.3",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.15",
-    "vite": "^5.4.11"
-  }
+  "devDependencies": { "concurrently": "^9.1.0" }
 }

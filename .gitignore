@@ -1,12 +1,17 @@
 node_modules/
-dist/
-
-# videos + GT are imported/written on disk, never committed
-*.mp4
-*.webm
-*.mov
-*.mkv
-*.m4v
-groundtruth/
-.DS_Store
+**/node_modules/
+web/dist/
+# team data + shared videos live on the host, never in the repo
+video/*.mp4
+video/*.webm
+video/*.mov
+video/*.mkv
+video/*.m4v
+video-proxy/
+data/*.json
+data/.session-secret
+groundtruth/*.json
+.env
+**/.env
 *.log
+.DS_Store
