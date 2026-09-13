@@ -231,33 +231,20 @@ export const useStore = create((set, get) => ({
     const prev = get().videoUrl;
     if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
     get().videoAbort?.abort();
-    const controller = new AbortController();
-
-    // No src yet: the video appears once its blob is fully downloaded, so that
-    // scrubbing — the whole job — is instant from the first frame shown.
+    // Stream the clip over byte ranges: the first frame appears at once and
+    // seeking fetches only what it needs. Full-length match clips are far too
+    // large to download whole into memory before playing.
     set({
       videoFile: null,
-      videoUrl: null,
+      videoUrl: api.videoStreamUrl(filename),
       videoMeta: null,
-      videoLoading: true,
-      videoProgress: 0,
-      videoAbort: controller,
+      videoLoading: false,
+      videoProgress: 1,
+      videoAbort: null,
       currentTime: 0,
       playing: false,
       seekRequest: null,
     });
-
-    api
-      .fetchVideoBlob(filename, (f) => { if (!controller.signal.aborted) set({ videoProgress: f }); }, controller.signal)
-      .then((url) => {
-        if (controller.signal.aborted) return URL.revokeObjectURL(url);
-        set({ videoUrl: url, videoLoading: false, videoProgress: 1 });
-      })
-      .catch((err) => {
-        if (err?.name === 'AbortError') return;
-        set({ videoLoading: false });
-        get().toast(err.message, 'error');
-      });
   },
 
   /**
