@@ -7,6 +7,7 @@
   "scripts": {
     "build": "npm -w web run build",
     "start": "npm -w server run start",
+    "proxies": "npm -w server run proxies",
     "dev": "concurrently -n server,web -c green,cyan \"npm -w server run dev\" \"npm -w web run dev\""
   },
   "devDependencies": { "concurrently": "^9.1.0" }

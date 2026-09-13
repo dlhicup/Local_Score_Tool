@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { listProjects, readProject, writeProject, emptyProject, idForVideo, deleteProject } from '../services/store.js';
 import { getAssignments, assignClips } from '../services/users.js';
 import { removeGroundTruth } from '../services/gtfile.js';
+import { ensureProxy, proxyState, removeProxy } from '../services/proxy.js';
 import { requireAuth } from '../middleware/auth.js';
 
 /**
@@ -57,6 +58,7 @@ router.delete('/videos/:name', requireAuth, async (req, res, next) => {
   if (!full) return res.status(400).json({ error: 'Bad video name' });
   try {
     await fs.unlink(full).catch((e) => { if (e.code !== 'ENOENT') throw e; });
+    await removeProxy(name).catch(() => {});
     await deleteProject(idForVideo(name)).catch(() => {});
     await removeGroundTruth(name).catch(() => {});
     await assignClips([name], null).catch(() => {});
@@ -91,6 +93,9 @@ router.post('/videos/upload', requireAuth, async (req, res, next) => {
     const stat = await fs.stat(tmp);
     if (stat.size < 1024) { await fs.unlink(tmp).catch(() => {}); return res.status(400).json({ error: 'Upload was empty' }); }
     await fs.rename(tmp, full);
+    // Build a browser-safe H.264 proxy in the background so HEVC/Veo clips play.
+    // The response does not wait on it; the annotate page polls /proxy for it.
+    ensureProxy(name).catch(() => {});
     res.status(201).json({ name, size: stat.size });
   } catch (err) {
     await fs.unlink(`${full}.uploading`).catch(() => {});
@@ -115,9 +120,10 @@ router.get('/videos', requireAuth, async (req, res, next) => {
     // One stat per clip, all in flight at once — a thousand serial round trips
     // to the filesystem is what made this list slow.
     const eligible = names.filter((name) => VIDEO_RE.test(name) && (!allowed || allowed.has(name)));
-    const stats = await Promise.all(
-      eligible.map((name) => fs.stat(path.join(VIDEO_DIR, name)).catch(() => null)),
-    );
+    const [stats, proxies] = await Promise.all([
+      Promise.all(eligible.map((name) => fs.stat(path.join(VIDEO_DIR, name)).catch(() => null))),
+      Promise.all(eligible.map((name) => proxyState(name).then((p) => p.state).catch(() => 'none'))),
+    ]);
     const videos = [];
     for (let i = 0; i < eligible.length; i++) {
       const name = eligible[i];
@@ -133,6 +139,7 @@ router.get('/videos', requireAuth, async (req, res, next) => {
         name,
         size: stat.size,
         mtime: stat.mtimeMs,
+        proxy: proxies[i], // ready | encoding | failed | unavailable | none
         assignedTo: assignments[name] ?? null,
         project: p
           ? {
@@ -268,6 +275,27 @@ router.get('/videos/file/:name', requireAuth, async (req, res, next) => {
     send({ start, end });
   } catch (err) {
     if (err.code === 'ENOENT') return res.status(404).json({ error: 'Video not found' });
+    next(err);
+  }
+});
+
+/**
+ * Playback readiness for a clip. Reports whether a browser-safe H.264 proxy
+ * exists (`ready`), is being built (`encoding`, with `pct`), failed, or can't
+ * be built because ffmpeg is missing (`unavailable`). Reading it also kicks off
+ * the encode when none has started yet, so simply opening an HEVC clip begins
+ * making it playable — the annotate page polls this until it turns `ready`.
+ */
+router.get('/videos/:name/proxy', requireAuth, async (req, res, next) => {
+  const name = path.basename(req.params.name);
+  if (!resolveVideo(name)) return res.status(400).json({ error: 'Bad video name' });
+  try {
+    const current = await proxyState(name);
+    // Start one lazily, but never re-trigger a job that is already running or a
+    // proxy that already exists.
+    const state = current.state === 'none' ? await ensureProxy(name) : current;
+    res.json(state);
+  } catch (err) {
     next(err);
   }
 });
