@@ -97,9 +97,8 @@ app.use((err, _req, res, _next) => {
 const seeded = await ensureSeedAdmin();
 if (seeded) {
   console.log('');
-  console.log('  Created the first admin account:');
+  console.log('  Created the first admin account (sign in with just this username):');
   console.log(`    username: ${seeded.username}`);
-  console.log(`    password: ${seeded.password}${seeded.generated ? '   (generated — save it now)' : ''}`);
   console.log('');
 }
 

@@ -103,10 +103,8 @@ export async function ensureSeedAdmin() {
   return withStore(async (doc) => {
     if (doc.users.length) return null;
     const username = process.env.ADMIN_USER || 'admin';
-    const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(6).toString('base64url');
-    const { salt, hash } = hashPassword(password);
-    doc.users.push({ username, role: 'admin', salt, hash, createdAt: new Date().toISOString(), hotkeys: {} });
-    return { username, password, generated: !process.env.ADMIN_PASSWORD };
+    doc.users.push({ username, role: 'admin', createdAt: new Date().toISOString(), hotkeys: {} });
+    return { username, generated: false };
   });
 }
 
@@ -125,30 +123,28 @@ export async function getUser(username) {
 
 export async function authenticate(username, password) {
   const doc = await load();
-  const u = doc.users.find((x) => x.username === String(username || '').trim());
-  if (!u) return null;
-  if (!verifyPassword(password, u.salt, u.hash)) return null;
-  return publicUser(u);
+  // Local team tool: no passwords. Signing in is just claiming a username that
+  // the admin has created; identity drives assignments, not secrecy.
+  const u = doc.users.find((x) => x.username.toLowerCase() === String(username || '').trim().toLowerCase());
+  return u ? publicUser(u) : null;
 }
 
-export async function createUser({ username, password, role }) {
+export async function createUser({ username, role }) {
   const name = String(username || '').trim();
   if (!/^[A-Za-z0-9._-]{2,32}$/.test(name)) throw Object.assign(new Error('Username must be 2-32 chars: letters, digits, . _ -'), { status: 400 });
-  if (String(password || '').length < 6) throw Object.assign(new Error('Password must be at least 6 characters'), { status: 400 });
   if (!ROLES.includes(role)) throw Object.assign(new Error('Role must be admin or annotator'), { status: 400 });
 
   return withStore(async (doc) => {
     if (doc.users.some((u) => u.username.toLowerCase() === name.toLowerCase())) {
       throw Object.assign(new Error('That username is taken'), { status: 409 });
     }
-    const { salt, hash } = hashPassword(password);
-    const u = { username: name, role, salt, hash, createdAt: new Date().toISOString(), hotkeys: {} };
+    const u = { username: name, role, createdAt: new Date().toISOString(), hotkeys: {} };
     doc.users.push(u);
     return publicUser(u);
   });
 }
 
-export async function updateUser(username, { password, role }) {
+export async function updateUser(username, { role }) {
   return withStore(async (doc) => {
     const u = doc.users.find((x) => x.username === username);
     if (!u) throw Object.assign(new Error('No such user'), { status: 404 });
@@ -161,10 +157,6 @@ export async function updateUser(username, { password, role }) {
         throw Object.assign(new Error('This is the only admin — promote someone else first'), { status: 400 });
       }
       u.role = role;
-    }
-    if (password) {
-      if (String(password).length < 6) throw Object.assign(new Error('Password must be at least 6 characters'), { status: 400 });
-      Object.assign(u, hashPassword(password));
     }
     return publicUser(u);
   });

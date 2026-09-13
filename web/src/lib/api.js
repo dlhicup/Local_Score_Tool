@@ -56,10 +56,9 @@ async function request(path, { method = 'GET', body, signal } = {}) {
 export const api = {
   health: () => request('/health'),
 
-  login: (username, password) => request('/auth/login', { method: 'POST', body: { username, password } }),
+  login: (username) => request('/auth/login', { method: 'POST', body: { username } }),
   me: () => request('/auth/me'),
   saveHotkeys: (hotkeys) => request('/auth/hotkeys', { method: 'PUT', body: { hotkeys } }),
-  changePassword: (current, password) => request('/auth/password', { method: 'PUT', body: { current, password } }),
 
   listUsers: () => request('/users'),
   createUser: (body) => request('/users', { method: 'POST', body }),

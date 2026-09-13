@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { isReviewAdmin } from '../lib/roles';
 import { motion } from 'framer-motion';
 import { SlidersHorizontal, Keyboard as KeyboardIcon, RotateCcw, AlertTriangle, Check, Lock } from 'lucide-react';
 import { useStore, DEFAULT_SETTINGS } from '../store/useStore';
@@ -176,55 +175,9 @@ function Hotkeys() {
   );
 }
 
-/** Change your own password. */
-function Password() {
-  const toast = useStore((s) => s.toast);
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await api.changePassword(current, next);
-      setCurrent('');
-      setNext('');
-      toast('Password changed', 'success');
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section className="panel mb-6 p-5">
-      <header className="mb-4 flex items-center gap-2">
-        <Lock size={15} className="text-pitch-400" />
-        <h2 className="text-sm font-semibold text-white">Password</h2>
-      </header>
-      <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
-        <label className="min-w-[150px] flex-1">
-          <span className="label-text mb-1 block">Current</span>
-          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} className="field py-2 text-xs" />
-        </label>
-        <label className="min-w-[150px] flex-1">
-          <span className="label-text mb-1 block">New (min 6)</span>
-          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} className="field py-2 text-xs" />
-        </label>
-        <button type="submit" disabled={busy || !current || next.length < 6} className="btn-ghost text-xs">
-          Change
-        </button>
-      </form>
-    </section>
-  );
-}
 
 export default function Settings() {
   const { settings, updateSettings } = useStore();
-  const user = useStore((s) => s.user);
-  const canChangePassword = !isReviewAdmin(user);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -236,8 +189,6 @@ export default function Settings() {
           Ground truth is written by hand here. Frame numbers are always on the fixed {REPORTING_FPS} fps reporting
           clock, whatever the source clip runs at.
         </p>
-
-        {canChangePassword && <Password />}
 
         <section className="panel mb-6 p-5">
           <header className="mb-2 flex items-center gap-2">

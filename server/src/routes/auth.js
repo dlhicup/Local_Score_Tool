@@ -13,7 +13,7 @@ router.post('/auth/login', async (req, res, next) => {
     const user = await authenticate(username, password);
     // One message for both cases: saying "no such user" tells an attacker
     // which usernames exist.
-    if (!user) return res.status(401).json({ error: 'Wrong username or password' });
+    if (!user) return res.status(401).json({ error: 'No such user — ask an admin to create your account' });
     res.json({ token: issueToken(user), user });
   } catch (err) {
     next(err);
@@ -40,18 +40,6 @@ router.put('/auth/hotkeys', requireAuth, async (req, res, next) => {
   }
 });
 
-router.put('/auth/password', requireAuth, async (req, res, next) => {
-  try {
-    const { current, password } = req.body ?? {};
-    if (!(await authenticate(req.user.username, current))) {
-      return res.status(403).json({ error: 'Current password is wrong' });
-    }
-    await updateUser(req.user.username, { password });
-    res.json({ ok: true });
-  } catch (err) {
-    next(err);
-  }
-});
 
 // ------------------------------------------------------------ admin only
 

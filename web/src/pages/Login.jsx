@@ -7,7 +7,6 @@ import { useStore } from '../store/useStore';
 export default function Login() {
   const signIn = useStore((s) => s.signIn);
   const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -16,7 +15,7 @@ export default function Login() {
     setBusy(true);
     setError(null);
     try {
-      await signIn(username.trim(), password);
+      await signIn(username.trim());
     } catch (err) {
       setError(err.message);
       setPassword('');
@@ -53,17 +52,6 @@ export default function Login() {
             />
           </label>
 
-          <label className="block">
-            <span className="label-text mb-1.5 block">Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              className="field"
-            />
-          </label>
-
           {error && (
             <div className="flex items-start gap-2 rounded-lg border border-avoid-500/30 bg-avoid-500/[0.08] px-3 py-2">
               <AlertTriangle size={13} className="mt-0.5 shrink-0 text-avoid-500" />
@@ -71,7 +59,7 @@ export default function Login() {
             </div>
           )}
 
-          <button type="submit" disabled={busy || !username || !password} className="btn-primary w-full">
+          <button type="submit" disabled={busy || !username} className="btn-primary w-full">
             <LogIn size={15} /> {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>

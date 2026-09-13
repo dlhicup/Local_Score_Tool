@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users2, UserPlus, Trash2, KeyRound, Shield, Film, Check, X, Search, ListOrdered, Wand2, Scale } from 'lucide-react';
+import { Users2, UserPlus, Trash2, Shield, Film, Check, X, Search, ListOrdered, Wand2, Scale } from 'lucide-react';
 import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 
@@ -22,7 +22,7 @@ export default function Users() {
   const [assignments, setAssignments] = useState({});
   const [loading, setLoading] = useState(true);
 
-  const [draft, setDraft] = useState({ username: '', password: '', role: 'annotator' });
+  const [draft, setDraft] = useState({ username: '', role: 'annotator' });
   const [selected, setSelected] = useState(() => new Set());
   const [assignee, setAssignee] = useState('');
   const [query, setQuery] = useState('');
@@ -110,7 +110,7 @@ export default function Users() {
     e.preventDefault();
     try {
       await api.createUser(draft);
-      setDraft({ username: '', password: '', role: 'annotator' });
+      setDraft({ username: '', role: 'annotator' });
       toast(`${draft.username} created`, 'success');
       load();
     } catch (err) {
@@ -132,16 +132,6 @@ export default function Users() {
     }
   };
 
-  const resetPassword = async (u) => {
-    const password = window.prompt(`New password for ${u.username} (min 6 characters)`);
-    if (!password) return;
-    try {
-      await api.updateUser(u.username, { password });
-      toast(`Password updated for ${u.username}`, 'success');
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  };
 
   const apply = async (username) => {
     const clips = [...selected];
@@ -331,9 +321,6 @@ export default function Users() {
                     );
                   })()}
                 <div className="ml-auto flex items-center gap-1">
-                  <button onClick={() => resetPassword(u)} title="Set a new password" className="rounded-md p-1.5 text-ink-500 transition hover:bg-white/10 hover:text-white">
-                    <KeyRound size={14} />
-                  </button>
                   {u.username !== me?.username && (
                     <button onClick={() => removeUser(u)} title="Delete" className="rounded-md p-1.5 text-ink-600 transition hover:bg-avoid-500/15 hover:text-avoid-500">
                       <Trash2 size={14} />
@@ -348,10 +335,6 @@ export default function Users() {
             <label className="min-w-[140px] flex-1">
               <span className="label-text mb-1 block">Username</span>
               <input value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} className="field py-2 text-xs" />
-            </label>
-            <label className="min-w-[140px] flex-1">
-              <span className="label-text mb-1 block">Password</span>
-              <input type="password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} className="field py-2 text-xs" />
             </label>
             <label>
               <span className="label-text mb-1 block">Role</span>

@@ -59,8 +59,8 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  signIn: async (username, password) => {
-    const { token, user } = await api.login(username, password);
+  signIn: async (username) => {
+    const { token, user } = await api.login(username);
     setToken(token);
     set({ user });
     return user;

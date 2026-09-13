@@ -19,14 +19,15 @@ tool can't do that — its storage is private to each browser.)
 ## Run it
 
 ```bash
-cp .env.example server/.env      # set ADMIN_PASSWORD and AUTH_SECRET
+cp .env.example server/.env      # set ADMIN_USER and AUTH_SECRET (no passwords)
 npm install                      # installs server + web
 npm run build                    # build the web app
 npm start                        # serve on http://<host-ip>:9044
 ```
 
-Members reach it at **`http://<host-ip>:9044`** on your LAN. On first start an
-admin account is created from `.env`.
+Members reach it at **`http://<host-ip>:9044`** on your LAN. On first start an admin
+account is created from `.env`. **There are no passwords** — everyone signs in
+with just their username, so this is meant for a trusted LAN.
 
 For development with hot reload: `npm run dev` (web on :5173, API on :8790).
 
@@ -39,8 +40,8 @@ them stable.
 
 ## The workflow
 
-1. **Admin** signs in, opens **Users & assignments**, and creates a member
-   account for each teammate.
+1. **Admin** signs in (username only), opens **Users & assignments**, and
+   creates a member account for each teammate — just a username and a role.
 2. Admin **assigns clips** to members (by range or selection). Each member sees
    only what they're assigned.
 3. Members open a clip and **annotate** — hotkeys, a lane timeline, frame-by-
@@ -61,7 +62,7 @@ them stable.
 
 | var | what |
 | --- | --- |
-| `ADMIN_USER` / `ADMIN_PASSWORD` | the first admin, seeded once on an empty store |
+| `ADMIN_USER` | the first admin, seeded once on an empty store (no password — username-only sign-in) |
 | `AUTH_SECRET` | signs session tokens — set a long random string so logins survive a restart (`openssl rand -base64 48`) |
 | `PORT` | the API (loopback) |
 | `PUBLIC_PORT` | the app, served to the team over the LAN (default 9044) |
