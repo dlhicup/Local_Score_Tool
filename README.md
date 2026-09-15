@@ -141,6 +141,7 @@ access to every clip, so run this only on a network you trust.
 | **Library** | every clip, its status, and how much is annotated. Open one to start. Drag files in to import them. |
 | **Annotate** | the workspace: player, lane timeline, inspector |
 | **Events guide** | the 15 labels and what each one means |
+| **Reference** | worked examples — a clip beside its ground truth, read-only, to learn the conventions |
 | **Review** | go through annotated clips and approve or flag them |
 | **Users & assignments** | label who owns which clip |
 | **Settings** | nudge step, seek step, page size |
@@ -187,6 +188,19 @@ from the Library when you're done.
 These are the only labels allowed. The server rejects anything else, so a
 ground-truth file can never drift off the taxonomy. Definitions are on the
 **Events guide** page in the app.
+
+### Reference examples
+
+The **Reference** page shows worked examples — a clip beside its ground truth,
+laid out like the workspace with the same player: zoom, `←`/`→` frame stepping
+(`⇧` for one second), `↑`/`↓` to jump between actions, `Space` to play. It is
+strictly read-only.
+
+Populate it by dropping matched pairs into an **`exam/`** folder on the host —
+for each example, two files that share a base name: `name.gt.json` (the ground
+truth, either `{"groundtruth":[…]}` or a bare array) and `name.mp4` (the clip,
+H.264 so it plays in the browser). Until that folder has pairs, the page
+explains how to add them.
 
 ---
 
@@ -282,13 +296,14 @@ something, copy `.env.example` to `server/.env`.
 
 - `video/` — the shared clips (host-local, never in git)
 - `video-proxy/` — H.264 copies of only those clips a browser cannot decode
+- `exam/` — reference examples: `<name>.gt.json` + `<name>.mp4` pairs shown on the Reference page
 - `data/` — working records and the user list
 - `groundtruth/` — the deliverable `<clip name>.json` files
 - `server/`, `web/` — the app
 
-Everything under `video/`, `video-proxy/`, `data/` and `groundtruth/` stays on
-the host and is kept out of the repo. **Back up `data/` and `groundtruth/`** —
-that's the team's work.
+Everything under `video/`, `video-proxy/`, `exam/`, `data/` and `groundtruth/`
+stays on the host and is kept out of the repo. **Back up `data/` and
+`groundtruth/`** — that's the team's work.
 
 ## Development
 

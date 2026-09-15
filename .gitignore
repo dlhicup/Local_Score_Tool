@@ -14,6 +14,8 @@ data/.session-secret
 data/*.tmp
 groundtruth/*.tmp
 groundtruth/*.json
+exam/*.json
+exam/*.mp4
 .env
 **/.env
 *.log

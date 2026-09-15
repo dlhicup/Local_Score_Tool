@@ -1,6 +1,6 @@
 import { NavLink, useParams, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, CheckCircle2 } from 'lucide-react';
+import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, CheckCircle2, GraduationCap } from 'lucide-react';
 import Logo from './Logo';
 import { useStore } from '../store/useStore';
 import { isManager } from '../lib/roles';
@@ -70,6 +70,7 @@ export default function AppShell({ children }) {
         <RailLink to="/" icon={LayoutGrid} label="Library" />
         <RailLink to={pid ? `/p/${pid}/annotate` : '#'} icon={ClipboardCheck} label="Annotate" disabled={!pid} />
         <RailLink to="/guide" icon={BookOpen} label="Events guide" />
+        <RailLink to="/reference" icon={GraduationCap} label="Reference" />
         {isAdmin && <RailLink to="/review" icon={CheckCircle2} label="Review" />}
         <div className="flex-1" />
         {manager && <RailLink to="/users" icon={Users2} label="Users & assignments" />}

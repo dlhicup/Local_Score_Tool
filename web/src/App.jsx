@@ -8,6 +8,7 @@ import Review from './pages/Review';
 import Settings from './pages/Settings';
 import Users from './pages/Users';
 import EventsGuide from './pages/EventsGuide';
+import Exam from './pages/Exam';
 import Reviewer from './pages/Reviewer';
 import { useStore } from './store/useStore';
 import { isManager } from './lib/roles';
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="/p/:id/extract" element={<Navigate to="../annotate" replace />} />
             <Route path="/users" element={<ManagerOnly><Users /></ManagerOnly>} />
             <Route path="/guide" element={<EventsGuide />} />
+            <Route path="/reference" element={<Exam />} />
             <Route path="/review" element={<AdminOnly><Reviewer /></AdminOnly>} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
