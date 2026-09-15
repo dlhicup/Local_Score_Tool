@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ZoomIn, ZoomOut, Crosshair, Maximize, Trash2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -25,8 +25,49 @@ function tickStep(pxPerSec) {
   return steps.find((s) => s >= raw) ?? 1800;
 }
 
-export default function Timeline({ events, duration, onScrub, onContextMenu }) {
+/**
+ * Everything that follows the playhead lives in these two components.
+ *
+ * The strip draws one marker per action — several hundred on a real clip — and
+ * not one of them moves when the playhead does. Subscribing to currentTime at
+ * the top of Timeline re-rendered all of them on every frame step, which is
+ * what made holding an arrow key feel like the page had frozen. Keeping the
+ * subscription down here means a step re-renders a line and a number.
+ */
+const TimeReadout = memo(function TimeReadout() {
   const currentTime = useStore((s) => s.currentTime);
+  return <span className="font-mono text-xs text-pitch-400 tabular">{seconds2(currentTime)}</span>;
+});
+
+const Playhead = memo(function Playhead({ zoom, scrollRef, follow, dragging }) {
+  const currentTime = useStore((s) => s.currentTime);
+  const playing = useStore((s) => s.playing);
+  const x = currentTime * zoom;
+
+  // Keep the playhead in view, unless the user is dragging.
+  useEffect(() => {
+    if (!follow || dragging) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollLeft, clientWidth } = el;
+    if (x < scrollLeft + 80 || x > scrollLeft + clientWidth - 120) {
+      // Smooth while playing; instant while stepping, where restarting an
+      // animation on every keypress is churn the user never sees finish.
+      el.scrollTo({ left: Math.max(0, x - clientWidth * 0.35), behavior: playing ? 'smooth' : 'auto' });
+    }
+  }, [x, follow, dragging, playing, scrollRef]);
+
+  return (
+    <div
+      className="pointer-events-none absolute top-0 z-20 h-full w-px bg-pitch-400"
+      style={{ left: x, boxShadow: '0 0 8px rgba(34,227,125,.8)' }}
+    >
+      <div className="absolute -left-[5px] top-0 h-2.5 w-2.5 rotate-45 rounded-[2px] bg-pitch-400" />
+    </div>
+  );
+});
+
+function Timeline({ events, duration, onScrub, onContextMenu }) {
   const clipName = useStore((s) => s.project?.video?.filename);
   const selectedId = useStore((s) => s.selectedId);
   const selectedIds = useStore((s) => s.selectedIds);
@@ -115,18 +156,6 @@ export default function Timeline({ events, duration, onScrub, onContextMenu }) {
     (x) => Math.max(0, Math.min(duration, x / zoom)),
     [zoom, duration],
   );
-
-  // Keep the playhead in view while playing, unless the user is dragging.
-  useEffect(() => {
-    if (!follow || drag) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    const x = timeToX(currentTime);
-    const { scrollLeft, clientWidth } = el;
-    if (x < scrollLeft + 80 || x > scrollLeft + clientWidth - 120) {
-      el.scrollTo({ left: Math.max(0, x - clientWidth * 0.35), behavior: 'smooth' });
-    }
-  }, [currentTime, follow, drag, timeToX]);
 
   const [scrubbing, setScrubbing] = useState(false);
   // Pointer moves arrive faster than frames can be decoded. Keep only the most
@@ -267,7 +296,7 @@ export default function Timeline({ events, duration, onScrub, onContextMenu }) {
       {/* Toolbar */}
       <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-3 py-2">
         <span className="label-text">Timeline</span>
-        <span className="font-mono text-xs text-pitch-400 tabular">{seconds2(currentTime)}</span>
+        <TimeReadout />
         <span className="hidden text-2xs text-ink-600 xl:inline">drag to scrub · shift-drag to select a span</span>
         <div className="flex-1" />
         <button
@@ -477,16 +506,17 @@ export default function Timeline({ events, duration, onScrub, onContextMenu }) {
               </div>
             )}
 
-            {/* Playhead */}
-            <div
-              className="pointer-events-none absolute top-0 z-20 h-full w-px bg-pitch-400"
-              style={{ left: timeToX(currentTime), boxShadow: '0 0 8px rgba(34,227,125,.8)' }}
-            >
-              <div className="absolute -left-[5px] top-0 h-2.5 w-2.5 rotate-45 rounded-[2px] bg-pitch-400" />
-            </div>
+            {/* Playhead — subscribes to the clock itself, so moving it does
+                not re-render the markers around it. */}
+            <Playhead zoom={zoom} scrollRef={scrollRef} follow={follow} dragging={Boolean(drag)} />
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+// The strip only needs redrawing when the actions, the clip length or the menu
+// handler change. Without this, any re-render of the workspace redrew every
+// marker on it.
+export default memo(Timeline);

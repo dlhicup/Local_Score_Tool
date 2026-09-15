@@ -70,10 +70,11 @@ export default function Review() {
   const [deleting, setDeleting] = useState(false);
 
   /** Right-click anywhere in the workspace offers the action list. */
-  const openMenu = (e, atTime) => {
+  // Stable identity, or it defeats the memo on Timeline every render.
+  const openMenu = useCallback((e, atTime) => {
     e.preventDefault();
     setMenu({ x: e.clientX, y: e.clientY, atTime });
-  };
+  }, []);
 
   useEffect(() => {
     // Skip while a delete is in flight: the project is already gone, and
