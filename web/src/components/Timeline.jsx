@@ -7,6 +7,13 @@ import { timecode, seconds2 } from '../lib/format';
 import { seekVideo } from '../lib/videoRef';
 
 const LANE_H = 24;
+// Marker geometry. A marker is drawn MARK_W wide, so two events collide unless
+// the gap between them is at least that many pixels — which is why a 42-minute
+// clip squeezed to the 2 px/s floor rendered whole passages as solid blocks.
+const MARK_W = 12;
+// Ceiling for the zoom chosen automatically on open. The user can go wider by
+// hand; this just stops a pathologically dense clip opening absurdly wide.
+const AUTO_ZOOM_MAX = 20;
 const GUTTER = 148;
 const RULER_H = 28;
 
@@ -61,16 +68,47 @@ export default function Timeline({ events, duration, onScrub, onContextMenu }) {
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
   }, [clipName]);
 
-  // Fit the whole video into view the first time we learn its duration —
-  // an arbitrary default zoom leaves either dead space or an unusable scroll.
+  /**
+    * The zoom at which this clip's own events stop colliding.
+    *
+    * Markers only overlap within a lane, so the gaps that matter are between
+    * consecutive events of the same type.
+    */
+  const separationZoom = useMemo(() => {
+    const byType = new Map();
+    for (const e of events) {
+      if (!byType.has(e.type)) byType.set(e.type, []);
+      byType.get(e.type).push(e.timestamp);
+    }
+    const gaps = [];
+    for (const list of byType.values()) {
+      list.sort((a, b) => a - b);
+      for (let i = 1; i < list.length; i++) {
+        const g = list[i] - list[i - 1];
+        if (g > 0) gaps.push(g);
+      }
+    }
+    if (!gaps.length) return 0;
+    // The closest pair in the clip sets the bar: at this zoom even they clear
+    // each other. AUTO_ZOOM_MAX caps the result, so a freak 0.1s pair widens
+    // the track as far as is sensible and no further.
+    const tightest = Math.min(...gaps);
+    return tightest > 0 ? MARK_W / tightest : 0;
+  }, [events]);
+
+  // Open the clip at a zoom where its events are actually distinguishable.
+  // Fitting the whole duration into the panel is the ideal, but on a 42-minute
+  // clip that lands at the 2 px/s floor, where a second of play is two pixels
+  // and every marker lands on its neighbour. Prefer whichever is wider.
   useEffect(() => {
     if (fitted || !duration || !scrollRef.current) return;
     const w = scrollRef.current.clientWidth;
     if (w > 0) {
-      setZoom(Math.max(2, (w - 24) / duration));
+      const fit = (w - 24) / duration;
+      setZoom(Math.min(AUTO_ZOOM_MAX, Math.max(2, fit, separationZoom)));
       setFitted(true);
     }
-  }, [duration, fitted]);
+  }, [duration, fitted, separationZoom]);
 
   const timeToX = useCallback((t) => t * zoom, [zoom]);
   const xToTime = useCallback(
@@ -409,9 +447,9 @@ export default function Timeline({ events, duration, onScrub, onContextMenu }) {
                   title={`${labelTitle(ev.type)} · ${timecode(ev.timestamp)}`}
                   className="absolute z-10 cursor-ew-resize"
                   style={{
-                    left: timeToX(t) - 6,
+                    left: timeToX(t) - MARK_W / 2,
                     top: RULER_H + i * LANE_H + 3,
-                    width: 12,
+                    width: MARK_W,
                     height: LANE_H - 6,
                   }}
                 >

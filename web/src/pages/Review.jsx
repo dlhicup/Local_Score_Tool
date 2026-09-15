@@ -18,6 +18,16 @@ import { getVideoEl } from '../lib/videoRef';
 
 const NEAR = 0.6; // seconds either side of the playhead counted as "now"
 
+// Timeline geometry, mirrored from Timeline.jsx so the workspace can give the
+// strip exactly the height its lanes need. Keep in step with LANE_H/RULER_H.
+const LANE_H = 24;
+const RULER_H = 28;
+const TIMELINE_CHROME = 39; // toolbar row + the panel's top and bottom borders
+// Never shorter than this (the toolbar plus a lane or two still has to read),
+// and never more than this share of the workspace, so the picture stays usable.
+const TIMELINE_MIN = 150;
+const TIMELINE_MAX_SHARE = '65%';
+
 export default function Review() {
   const { id } = useParams();
   const opening = useRef(null);
@@ -83,6 +93,15 @@ export default function Review() {
   );
 
   const stats = useMemo(() => ({ total: events.length }), [events]);
+
+  /**
+   * The timeline shows one lane per event type the clip actually uses, so its
+   * natural height grows with the work. A fixed 30% row cut the lanes off once
+   * a clip had more than about six types — the events were there, just scrolled
+   * out of sight. Size the row to its content instead, within bounds.
+   */
+  const laneCount = useMemo(() => new Set(events.map((e) => e.type)).size, [events]);
+  const timelineRow = TIMELINE_CHROME + RULER_H + Math.max(laneCount, 1) * LANE_H;
 
   /** Move the selection through the list in timeline order and follow the video. */
   const stepSelection = useCallback(
@@ -213,7 +232,15 @@ export default function Review() {
           template literal is not always emitted by the CSS scanner, and a
           missing column silently turned the inspector into an overlay. */}
       <div className="flex min-h-0 w-full min-w-0 flex-1 gap-3 p-3">
-        <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[7fr_3fr] gap-3">
+        {/* Rows are set inline, not as a grid-rows-[...] class: the height is
+            computed, and a class built from a template literal is not always
+            emitted by the CSS scanner. */}
+        <div
+          className="grid min-h-0 min-w-0 flex-1 gap-3"
+          style={{
+            gridTemplateRows: `minmax(0, 1fr) minmax(0, max(${TIMELINE_MIN}px, min(${timelineRow}px, ${TIMELINE_MAX_SHARE})))`,
+          }}
+        >
           {/* min-w-0 on each row: a grid item's default min-width:auto refuses to
               shrink below its content, so the timeline track (duration x zoom —
               ~30,000px on a 42-minute clip) would stretch this column and push
