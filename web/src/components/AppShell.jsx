@@ -1,4 +1,4 @@
-import { NavLink, useParams, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useParams, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, CheckCircle2 } from 'lucide-react';
 import Logo from './Logo';
@@ -43,12 +43,10 @@ function RailLink({ to, icon: Icon, label, disabled }) {
 export default function AppShell({ children }) {
   const { id } = useParams();
   const location = useLocation();
-  const navigate = useNavigate();
   const project = useStore((s) => s.project);
   const dirty = useStore((s) => s.dirty);
   const events = useStore((s) => s.events);
   const save = useStore((s) => s.saveProject);
-  const saveAndAdvance = useStore((s) => s.saveAndAdvance);
   const user = useStore((s) => s.user);
   const headerDelete = useStore((s) => s.headerDelete);
   const saved = useStore((s) => s.saved);
@@ -137,7 +135,8 @@ export default function AppShell({ children }) {
                 </button>
               )}
 
-              <button onClick={() => saveAndAdvance(navigate)} disabled={!dirty} className={dirty ? 'btn-primary' : 'btn-ghost'}>
+              {/* Save writes this clip's ground truth and stays put. */}
+              <button onClick={() => save().catch(() => {})} disabled={!dirty} className={dirty ? 'btn-primary' : 'btn-ghost'}>
                 <Save size={15} />
                 {dirty ? 'Save' : 'Saved'}
               </button>

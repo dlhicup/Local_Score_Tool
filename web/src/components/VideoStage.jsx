@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
-  Volume2, VolumeX, Maximize2, Gauge, Loader2,
+  Volume2, VolumeX, Maximize2, Gauge,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { timecode, seconds2 } from '../lib/format';
@@ -21,7 +21,6 @@ export default function VideoStage({ nearbyEvents = [] }) {
   const seekRequest = useStore((s) => s.seekRequest);
   const setVideoMeta = useStore((s) => s.setVideoMeta);
   const videoLoading = useStore((s) => s.videoLoading);
-  const videoConverting = useStore((s) => s.videoConverting);
   const [ready, setReady] = useState(false);
   const videoProgress = useStore((s) => s.videoProgress);
   const rate = useStore((s) => s.playbackRate);
@@ -236,28 +235,6 @@ export default function VideoStage({ nearbyEvents = [] }) {
           if (e.currentTarget.paused) setCurrentTime(e.currentTarget.currentTime);
         }}
       />
-
-      {/* One-time transcode of an HEVC/Veo clip to a browser-playable proxy.
-          The original is what is loaded underneath (and shows black until the
-          proxy lands), so cover it while the encode runs. */}
-      {videoConverting && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/85 backdrop-blur-sm">
-          <Loader2 size={26} className="animate-spin text-pitch-400" />
-          <p className="text-sm font-medium text-white">Converting this clip for playback…</p>
-          {typeof videoConverting.pct === 'number' && (
-            <div className="h-1.5 w-56 overflow-hidden rounded-full bg-ink-700">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-pitch-600 to-pitch-400 transition-[width] duration-300"
-                style={{ width: `${Math.round(videoConverting.pct * 100)}%` }}
-              />
-            </div>
-          )}
-          <p className="max-w-[46ch] text-center text-2xs text-ink-400">
-            Veo clips use a codec the browser can't show, so the tool builds a playable
-            copy once. This runs on the host and only happens the first time.
-          </p>
-        </div>
-      )}
 
       {/* Events firing at this instant, shown over the picture */}
       <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1.5">

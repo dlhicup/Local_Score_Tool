@@ -25,7 +25,7 @@ export default function Review() {
   const {
     project, openProject, events, videoUrl, attachVideo, currentTime, seek,
     selectedId, selectedIds, select, clearSelection, addEvent, deleteEvent, deleteSelection, nudge, undo, redo,
-    saveProject, saveAndAdvance, dirty, setPlaying, playing, setPlaybackRate, toast,
+    saveProject, dirty, setPlaying, playing, setPlaybackRate, toast,
     past, future, loadingProject, settings, keyMap, setHeaderDelete,
     deleteCurrentProject,
   } = useStore();
@@ -103,11 +103,10 @@ export default function Review() {
 
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        // Same action as the Save button, including moving on to the next
-        // clip — one "save" in the app, not two that behave differently. With
-        // nothing to save there is nothing to do.
+        // The same action as the Save button: write this clip's ground truth
+        // and stay on it. With nothing to save there is nothing to do.
         if (!dirty) return;
-        return saveAndAdvance(navigate);
+        return saveProject().catch(() => {});
       }
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -176,7 +175,7 @@ export default function Review() {
         toast(`${labelTitle(label)} at ${currentTime.toFixed(2)}s`, 'success');
       }
     },
-    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, stepFrame, dirty, saveAndAdvance, navigate],
+    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, stepFrame, dirty, saveProject],
   );
 
   // Saving already writes groundtruth/<clip>.json, so the only header action
@@ -213,12 +212,16 @@ export default function Review() {
       {/* Flex rather than an arbitrary grid template: a class built from a
           template literal is not always emitted by the CSS scanner, and a
           missing column silently turned the inspector into an overlay. */}
-      <div className="flex min-h-0 flex-1 gap-3 p-3">
+      <div className="flex min-h-0 w-full min-w-0 flex-1 gap-3 p-3">
         <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[7fr_3fr] gap-3">
-          <div className="min-h-0" onContextMenu={(e) => openMenu(e, currentTime)}>
+          {/* min-w-0 on each row: a grid item's default min-width:auto refuses to
+              shrink below its content, so the timeline track (duration x zoom —
+              ~30,000px on a 42-minute clip) would stretch this column and push
+              the video's picture far off-screen, leaving a black stage. */}
+          <div className="min-h-0 min-w-0" onContextMenu={(e) => openMenu(e, currentTime)}>
             <VideoStage nearbyEvents={nearby} />
           </div>
-          <div className="min-h-0">
+          <div className="min-h-0 min-w-0">
             <Timeline events={events} duration={duration} onContextMenu={openMenu} />
           </div>
         </div>

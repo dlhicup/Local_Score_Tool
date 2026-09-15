@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { isValidLabel } from '../labels.js';
+import { writeFileAtomic } from './atomic.js';
 
 /**
  * The deliverable, written next to the working file on every save.
@@ -26,10 +26,24 @@ const REPORTING_FPS = 25;
 const toFrame = (seconds) =>
   Math.max(0, Math.round(Number(((Number(seconds) || 0) * REPORTING_FPS).toFixed(6))));
 
-/** `0002.mp4` -> `0002.json`, refusing anything that could escape the folder. */
+/**
+ * `Veo - Match 1.mp4` -> `Veo - Match 1.json`: the clip's own name with the
+ * extension swapped. The deliverable is identified by the clip it describes,
+ * so the name is preserved as-is rather than rewritten into something else.
+ *
+ * Spaces and ordinary punctuation are legal in a clip name and must survive.
+ * An allow-list of [A-Za-z0-9._-] fitted the old numbered corpus (0002.mp4)
+ * but silently rejected every real export — "Veo - Match - 1st XI football-clip
+ * 1.mp4" produced no file at all. Refuse only what could escape the folder or
+ * is not a usable filename.
+ */
 function fileFor(videoName) {
-  const base = path.basename(String(videoName || '')).replace(/\.[^.]+$/, '');
-  if (!base || !/^[A-Za-z0-9._-]+$/.test(base)) return null;
+  // basename() drops any directory part, so what remains cannot point outward.
+  const base = path.basename(String(videoName || '')).replace(/\.[^.]+$/, '').trim();
+  if (!base || base === '.' || base === '..') return null;
+  // Belt and braces: separators (basename only strips "\" on Windows), and the
+  // characters no filesystem accepts in a name.
+  if (/[\\/\0]/.test(base) || /[<>:"|?*\x00-\x1f]/.test(base)) return null;
   const full = path.join(GT_DIR, `${base}.json`);
   return full.startsWith(GT_DIR + path.sep) ? full : null;
 }
@@ -49,13 +63,15 @@ export async function writeGroundTruth(project) {
     .sort((a, b) => a.frame - b.frame || a._t - b._t)
     .map(({ frame, action }) => ({ frame, action }));
 
-  const body = `{"groundtruth":[\n${rows.map((r) => `  ${JSON.stringify(r)}`).join(',\n')}\n]}\n`;
+  // An empty result is still a valid deliverable — emit it cleanly rather than
+  // as a bracket pair wrapped around a blank line.
+  const body = rows.length
+    ? `{"groundtruth":[\n${rows.map((r) => `  ${JSON.stringify(r)}`).join(',\n')}\n]}\n`
+    : '{"groundtruth":[]}\n';
 
   await fs.mkdir(GT_DIR, { recursive: true });
   // Write-then-rename so a crash cannot leave a half-written deliverable.
-  const tmp = `${target}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  await fs.writeFile(tmp, body, 'utf8');
-  await fs.rename(tmp, target);
+  await writeFileAtomic(target, body);
 
   return { path: target, count: rows.length };
 }

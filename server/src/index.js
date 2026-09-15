@@ -31,9 +31,18 @@ const PUBLIC_PORT = Number(process.env.PUBLIC_PORT || 9044);
 const HOST = process.env.HOST || '127.0.0.1';
 
 app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
-// Squeezes JSON and HTML; video/mp4 is not a compressible type, so streams
-// pass through untouched.
-app.use(compression());
+// Squeezes JSON and HTML. Video is never compressed: a range response has to be
+// byte-exact, and re-encoding the body would break seeking. The default filter
+// already skips video/*, but say so outright rather than depend on it.
+app.use(
+  compression({
+    filter: (req, res) => {
+      const type = String(res.getHeader('Content-Type') || '');
+      if (type.startsWith('video/')) return false;
+      return compression.filter(req, res);
+    },
+  }),
+);
 // Frames arrive as base64 data URLs, so the default 100kb limit is far too small.
 app.use(express.json({ limit: process.env.JSON_LIMIT || '96mb' }));
 
@@ -94,7 +103,12 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ error: err.message ?? 'Internal error' });
 });
 
-const seeded = await ensureSeedAdmin();
+// A locked users.json must not stop the server booting: the store is re-read
+// on every request, so seeding can simply be retried on the next start.
+const seeded = await ensureSeedAdmin().catch((err) => {
+  console.error(`Could not seed the first admin account: ${err.message}`);
+  return null;
+});
 if (seeded) {
   console.log('');
   console.log('  Created the first admin account (sign in with just this username):');

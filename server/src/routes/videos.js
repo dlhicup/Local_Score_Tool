@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { listProjects, readProject, writeProject, emptyProject, idForVideo, deleteProject } from '../services/store.js';
 import { getAssignments, assignClips } from '../services/users.js';
 import { removeGroundTruth } from '../services/gtfile.js';
-import { ensureProxy, proxyState, removeProxy } from '../services/proxy.js';
 import { requireAuth } from '../middleware/auth.js';
 
 /**
@@ -24,10 +23,6 @@ const router = Router();
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const VIDEO_DIR = path.resolve(ROOT, process.env.VIDEO_DIR || 'video');
-// Lightweight 720p proxies for annotating. Encoded out of band; when a clip's
-// proxy exists it is served instead of the original — ~3x less to download,
-// with identical duration and frame timing. Originals are never modified.
-const PROXY_DIR = path.resolve(ROOT, process.env.PROXY_DIR || 'video-proxy');
 const VIDEO_RE = /\.(mp4|webm|mov|mkv|m4v)$/i;
 
 /** Never let a request escape the video directory. */
@@ -58,7 +53,6 @@ router.delete('/videos/:name', requireAuth, async (req, res, next) => {
   if (!full) return res.status(400).json({ error: 'Bad video name' });
   try {
     await fs.unlink(full).catch((e) => { if (e.code !== 'ENOENT') throw e; });
-    await removeProxy(name).catch(() => {});
     await deleteProject(idForVideo(name)).catch(() => {});
     await removeGroundTruth(name).catch(() => {});
     await assignClips([name], null).catch(() => {});
@@ -93,9 +87,6 @@ router.post('/videos/upload', requireAuth, async (req, res, next) => {
     const stat = await fs.stat(tmp);
     if (stat.size < 1024) { await fs.unlink(tmp).catch(() => {}); return res.status(400).json({ error: 'Upload was empty' }); }
     await fs.rename(tmp, full);
-    // Build a browser-safe H.264 proxy in the background so HEVC/Veo clips play.
-    // The response does not wait on it; the annotate page polls /proxy for it.
-    ensureProxy(name).catch(() => {});
     res.status(201).json({ name, size: stat.size });
   } catch (err) {
     await fs.unlink(`${full}.uploading`).catch(() => {});
@@ -120,10 +111,9 @@ router.get('/videos', requireAuth, async (req, res, next) => {
     // One stat per clip, all in flight at once — a thousand serial round trips
     // to the filesystem is what made this list slow.
     const eligible = names.filter((name) => VIDEO_RE.test(name) && (!allowed || allowed.has(name)));
-    const [stats, proxies] = await Promise.all([
-      Promise.all(eligible.map((name) => fs.stat(path.join(VIDEO_DIR, name)).catch(() => null))),
-      Promise.all(eligible.map((name) => proxyState(name).then((p) => p.state).catch(() => 'none'))),
-    ]);
+    const stats = await Promise.all(
+      eligible.map((name) => fs.stat(path.join(VIDEO_DIR, name)).catch(() => null)),
+    );
     const videos = [];
     for (let i = 0; i < eligible.length; i++) {
       const name = eligible[i];
@@ -139,7 +129,6 @@ router.get('/videos', requireAuth, async (req, res, next) => {
         name,
         size: stat.size,
         mtime: stat.mtimeMs,
-        proxy: proxies[i], // ready | encoding | failed | unavailable | none
         assignedTo: assignments[name] ?? null,
         project: p
           ? {
@@ -186,25 +175,17 @@ router.get('/videos/file/:name', requireAuth, async (req, res, next) => {
   }
 
   try {
-    // Prefer the proxy when its encode has landed (atomic rename, so a file
-    // that exists is complete).
-    let serve = full;
-    const proxy = path.join(PROXY_DIR, path.basename(full));
-    await fs.access(proxy).then(() => { serve = proxy; }, () => {});
+    const stat = await fs.stat(full);
+    const type = MIME[path.extname(full).toLowerCase()] ?? 'application/octet-stream';
 
-    const stat = await fs.stat(serve);
-    const type = MIME[path.extname(serve).toLowerCase()] ?? 'application/octet-stream';
-
-    // Identity of these exact bytes. It changes the moment a clip's proxy
-    // replaces its original, which is what makes the swap safe: a cached copy
-    // of the original can never shadow the smaller file.
+    // Identity of these exact bytes, so a cached copy is reused only while the
+    // file behind it is unchanged.
     const etag = `"${stat.size}-${Math.floor(stat.mtimeMs)}"`;
     const lastMod = new Date(stat.mtimeMs).toUTCString();
     // Cacheable for an hour without asking. must-revalidate here made every
     // range request revalidate — and a revalidation carrying a Range is
     // answered with bytes, never 304 — so the browser could not reuse a single
-    // byte it already had: a page reload re-downloaded whole clips. The ETag
-    // still swaps a cached original for its proxy within the hour.
+    // byte it already had: a page reload re-downloaded whole clips.
     const CACHE = 'private, max-age=3600';
     const base = { 'Cache-Control': CACHE, ETag: etag, 'Last-Modified': lastMod, 'Accept-Ranges': 'bytes' };
 
@@ -225,7 +206,7 @@ router.get('/videos/file/:name', requireAuth, async (req, res, next) => {
 
     /** Pipe a slice out, cleaning up if the client walks away mid-transfer. */
     const send = (opts) => {
-      const stream = createReadStream(serve, opts);
+      const stream = createReadStream(full, opts);
       // .pipe() forwards neither source errors nor client aborts, so an
       // unhandled read error would take the process down and every abandoned
       // seek would leak a file descriptor.
@@ -275,27 +256,6 @@ router.get('/videos/file/:name', requireAuth, async (req, res, next) => {
     send({ start, end });
   } catch (err) {
     if (err.code === 'ENOENT') return res.status(404).json({ error: 'Video not found' });
-    next(err);
-  }
-});
-
-/**
- * Playback readiness for a clip. Reports whether a browser-safe H.264 proxy
- * exists (`ready`), is being built (`encoding`, with `pct`), failed, or can't
- * be built because ffmpeg is missing (`unavailable`). Reading it also kicks off
- * the encode when none has started yet, so simply opening an HEVC clip begins
- * making it playable — the annotate page polls this until it turns `ready`.
- */
-router.get('/videos/:name/proxy', requireAuth, async (req, res, next) => {
-  const name = path.basename(req.params.name);
-  if (!resolveVideo(name)) return res.status(400).json({ error: 'Bad video name' });
-  try {
-    const current = await proxyState(name);
-    // Start one lazily, but never re-trigger a job that is already running or a
-    // proxy that already exists.
-    const state = current.state === 'none' ? await ensureProxy(name) : current;
-    res.json(state);
-  } catch (err) {
     next(err);
   }
 });

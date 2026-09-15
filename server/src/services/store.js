@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { EVENT_LABELS } from '../labels.js';
+import { writeFileAtomic, sweepTempFiles } from './atomic.js';
 
 // Anchor to the repo root, not process.cwd(): `npm run dev` starts the server
 // from server/ while `node server/src/index.js` starts it from the root, and
@@ -11,6 +12,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const DATA_DIR = path.resolve(ROOT, process.env.DATA_DIR || 'data');
 
 await fs.mkdir(DATA_DIR, { recursive: true });
+// Clear anything a hard kill left mid-write, so temp files cannot pile up.
+await sweepTempFiles(DATA_DIR);
 
 const safeId = (id) => /^[A-Za-z0-9_-]{1,64}$/.test(id);
 const fileFor = (id) => path.join(DATA_DIR, `${id}.json`);
@@ -57,7 +60,9 @@ export async function listProjects() {
   const files = await fs.readdir(DATA_DIR).catch(() => []);
   const out = [];
   for (const f of files) {
-    if (!f.endsWith('.json')) continue;
+    // Only ground-truth records. users.json shares this directory and would
+    // otherwise parse cleanly into a "project" with no id and no events.
+    if (!f.startsWith('gt_') || !f.endsWith('.json')) continue;
     try {
       const p = JSON.parse(await fs.readFile(path.join(DATA_DIR, f), 'utf8'));
       // Per-label counts let the library show the shape of a file at a glance,
@@ -105,10 +110,8 @@ export async function readProject(id) {
 export async function writeProject(project) {
   if (!safeId(project?.id)) throw Object.assign(new Error('Bad project id'), { status: 400 });
   project.meta = { ...(project.meta ?? {}), updatedAt: new Date().toISOString() };
-  const tmp = `${fileFor(project.id)}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   // Write-then-rename so a crash mid-save cannot truncate existing ground truth.
-  await fs.writeFile(tmp, JSON.stringify(project, null, 2), 'utf8');
-  await fs.rename(tmp, fileFor(project.id));
+  await writeFileAtomic(fileFor(project.id), JSON.stringify(project, null, 2));
   return project;
 }
 

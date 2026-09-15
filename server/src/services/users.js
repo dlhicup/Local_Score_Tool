@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { writeFileAtomic } from './atomic.js';
 
 /**
  * Users, sessions and clip assignments — all file-backed like the rest.
@@ -68,11 +69,7 @@ async function load() {
 }
 
 let queue = Promise.resolve();
-async function save(doc) {
-  const tmp = `${USERS}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(doc, null, 2), 'utf8');
-  await fs.rename(tmp, USERS);
-}
+const save = (doc) => writeFileAtomic(USERS, JSON.stringify(doc, null, 2));
 
 /** Serialised so two writes cannot clobber each other. */
 function withStore(fn) {
@@ -83,8 +80,13 @@ function withStore(fn) {
   // and freeze every later write until the process restarts.
   const result = queue.then(async () => {
     const doc = await load();
+    // Only write when the operation actually changed something. Seeding on a
+    // store that already has an admin changes nothing, and rewriting the file
+    // on every start is both pointless and — on Windows, where a rename can
+    // lose a race with a virus scanner — the write most likely to fail.
+    const before = JSON.stringify(doc);
     const r = await fn(doc);
-    await save(doc);
+    if (JSON.stringify(doc) !== before) await save(doc);
     return r;
   });
   queue = result.catch(() => {});

@@ -7,9 +7,11 @@ video/*.webm
 video/*.mov
 video/*.mkv
 video/*.m4v
-video-proxy/
 data/*.json
 data/.session-secret
+# stranded by an interrupted atomic write
+data/*.tmp
+groundtruth/*.tmp
 groundtruth/*.json
 .env
 **/.env

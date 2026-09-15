@@ -37,7 +37,6 @@ function loadSettings() {
 
 const uid = (p = 'evt') => `${p}_${Math.random().toString(16).slice(2, 10)}${Date.now().toString(16).slice(-4)}`;
 const sortEvents = (list) => [...list].sort((a, b) => a.timestamp - b.timestamp);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const useStore = create((set, get) => ({
   // -------------------------------------------------------------------- auth
@@ -161,7 +160,7 @@ export const useStore = create((set, get) => ({
       if (!silent) {
         const f = res.groundTruthFile;
         get().toast(
-          f ? `Saved ${f.count} actions to ${f.path.split('/').pop()}` : 'Ground truth saved',
+          f ? `Saved ${f.count} actions to ${f.path.split(/[\\/]/).pop()}` : 'Ground truth saved',
           'success',
         );
       }
@@ -202,9 +201,6 @@ export const useStore = create((set, get) => ({
 
   videoLoading: false,
   videoProgress: 0,
-  // While the host is transcoding an HEVC/Veo clip to a browser-safe proxy,
-  // this holds { pct } so the stage can show "Converting…" over the picture.
-  videoConverting: null,
 
   /**
    * Download the clip in full, then hand the player a blob URL.
@@ -218,7 +214,7 @@ export const useStore = create((set, get) => ({
     get().videoAbort?.abort();
     const prev = get().videoUrl;
     if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
-    set({ videoUrl: null, videoFile: null, videoMeta: null, videoLoading: false, videoProgress: 0, videoConverting: null, videoAbort: null });
+    set({ videoUrl: null, videoFile: null, videoMeta: null, videoLoading: false, videoProgress: 0, videoAbort: null });
   },
 
   /**
@@ -244,54 +240,11 @@ export const useStore = create((set, get) => ({
       videoMeta: null,
       videoLoading: false,
       videoProgress: 1,
-      videoConverting: null,
       videoAbort: null,
       currentTime: 0,
       playing: false,
       seekRequest: null,
     });
-    get().ensurePlayable(filename);
-  },
-
-  /**
-   * Keep a clip watchable. Veo/phone footage is H.265, which the browser can't
-   * decode (correct duration, black picture), so the server builds an H.264
-   * proxy and serves that once it lands. This polls the build: while it runs we
-   * show "Converting…", and the moment it finishes we re-point the element at
-   * the same URL (now serving the proxy) so the picture appears. If ffmpeg is
-   * missing, or the clip is already fine, it simply stops — the original plays.
-   */
-  ensurePlayable: async (filename) => {
-    if (!filename) return;
-    const still = () => get().project?.video?.filename === filename || get().videoFile?.name === filename;
-    for (;;) {
-      let st;
-      try {
-        st = await api.proxyState(filename);
-      } catch {
-        return; // status endpoint unreachable — leave the original playing
-      }
-      if (!still()) return; // annotator moved to another clip
-
-      if (st.state === 'encoding') {
-        set({ videoConverting: { pct: st.pct ?? null } });
-        await sleep(1500);
-        continue;
-      }
-
-      const wasConverting = Boolean(get().videoConverting);
-      set({ videoConverting: null });
-      if (st.state === 'ready' && wasConverting) {
-        // The proxy just replaced the original; the element has the black
-        // original loaded, so bust its cache to pull the playable bytes.
-        set({ videoUrl: `${api.videoStreamUrl(filename)}&r=${Date.now()}` });
-      } else if (st.state === 'failed') {
-        get().toast('Could not convert this clip for playback — check the server log', 'error');
-      } else if (st.state === 'unavailable') {
-        get().toast('Install ffmpeg on the host to view HEVC/Veo clips', 'error');
-      }
-      return;
-    }
   },
 
   /**
@@ -309,55 +262,6 @@ export const useStore = create((set, get) => ({
 
 
   /** Open a clip from the task list: find or create its ground truth, attach it. */
-  /**
-   * Save this clip, then move straight on to the next one in the queue.
-   *
-   * The whole job is a loop of annotate -> save -> next, so the button that
-   * ends one clip should open the following one. If the save fails nothing
-   * moves; if this was the last clip the queue itself is the right place to
-   * land.
-   */
-  saveAndAdvance: async (navigate) => {
-    const clip = get().project?.video?.filename;
-    try {
-      await get().saveProject({ silent: true });
-    } catch {
-      return; // saveProject has already said what went wrong
-    }
-    const next = await get().nextClipAfter(clip);
-    if (!next) {
-      get().toast(`Saved ${clip} — that was the last clip in your queue`, 'success');
-      return navigate('/');
-    }
-    try {
-      const project = await get().openTask(next.name);
-      get().toast(`Saved ${clip} → now on ${next.name}`, 'success');
-      navigate(`/p/${project.id}/annotate`);
-    } catch (err) {
-      get().toast(err.message, 'error');
-      navigate('/');
-    }
-  },
-
-  /**
-   * The clip that follows this one in the annotator's own queue.
-   *
-   * "Their queue" matters: /videos already returns only what a user may touch,
-   * so an annotator advances through their assignment and never lands on
-   * someone else's clip. Ordering is by name, which is the numbering.
-   */
-  nextClipAfter: async (filename) => {
-    if (!filename) return null;
-    try {
-      const { videos } = await api.listVideos();
-      const list = [...videos].sort((a, b) => a.name.localeCompare(b.name));
-      const i = list.findIndex((v) => v.name === filename);
-      return i >= 0 && i + 1 < list.length ? list[i + 1] : null;
-    } catch {
-      return null;
-    }
-  },
-
   openTask: async (name) => {
     const { project } = await api.openVideo(name);
     set({

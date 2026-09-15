@@ -54,11 +54,7 @@ function TaskRow({ v, onOpen, onDelete }) {
 
       <span className="min-w-0">
         <span className="block truncate font-mono text-xs text-ink-100">{v.name}</span>
-        {v.proxy === 'encoding' ? (
-          <span className="block truncate text-2xs text-pitch-400">preparing playback…</span>
-        ) : v.proxy === 'unavailable' ? (
-          <span className="block truncate text-2xs text-ink-600" title="Install ffmpeg on the host to convert HEVC/Veo clips">codec may need ffmpeg</span>
-        ) : p && (
+        {p && (
           <span className="block truncate text-2xs text-ink-500">
             {p.updatedAt ? `edited ${relativeTime(p.updatedAt)}` : ''}
           </span>

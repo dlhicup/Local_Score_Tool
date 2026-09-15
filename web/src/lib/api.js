@@ -102,8 +102,6 @@ export const api = {
   reviewClip: (id) => request(`/review/${encodeURIComponent(id)}`),
   reviewVerdict: (id, body) => request(`/review/${encodeURIComponent(id)}`, { method: 'PUT', body }),
   openVideo: (name) => request(`/videos/${encodeURIComponent(name)}/open`, { method: 'POST', body: {} }),
-  /** Whether a browser-safe H.264 proxy is ready/encoding; reading it starts one. */
-  proxyState: (name) => request(`/videos/${encodeURIComponent(name)}/proxy`),
   /** Streamed from the server with range support, so seeking works. */
   /**
    * Pull the whole clip down before annotating starts.
