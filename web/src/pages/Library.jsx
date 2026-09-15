@@ -54,7 +54,15 @@ function TaskRow({ v, onOpen, onDelete }) {
 
       <span className="min-w-0">
         <span className="block truncate font-mono text-xs text-ink-100">{v.name}</span>
-        {p && (
+        {v.proxy === 'encoding' ? (
+          <span className="block truncate text-2xs text-pitch-400">preparing playback…</span>
+        ) : v.proxy === 'needed' ? (
+          <span className="block truncate text-2xs text-amber-400" title="This clip's codec can't be shown by a browser — it will be converted when opened">needs converting</span>
+        ) : v.proxy === 'failed' ? (
+          <span className="block truncate text-2xs text-avoid-500">conversion failed</span>
+        ) : v.proxy === 'unavailable' ? (
+          <span className="block truncate text-2xs text-ink-600" title="Install ffmpeg on the host to convert HEVC/Veo clips">codec may need ffmpeg</span>
+        ) : p && (
           <span className="block truncate text-2xs text-ink-500">
             {p.updatedAt ? `edited ${relativeTime(p.updatedAt)}` : ''}
           </span>

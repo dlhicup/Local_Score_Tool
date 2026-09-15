@@ -37,6 +37,7 @@ function loadSettings() {
 
 const uid = (p = 'evt') => `${p}_${Math.random().toString(16).slice(2, 10)}${Date.now().toString(16).slice(-4)}`;
 const sortEvents = (list) => [...list].sort((a, b) => a.timestamp - b.timestamp);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const useStore = create((set, get) => ({
   // -------------------------------------------------------------------- auth
@@ -201,6 +202,9 @@ export const useStore = create((set, get) => ({
 
   videoLoading: false,
   videoProgress: 0,
+  // While the host transcodes a clip the browser cannot decode, this holds
+  // { pct } so the stage can show "Converting…" instead of a black picture.
+  videoConverting: null,
 
   /**
    * Download the clip in full, then hand the player a blob URL.
@@ -214,7 +218,7 @@ export const useStore = create((set, get) => ({
     get().videoAbort?.abort();
     const prev = get().videoUrl;
     if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
-    set({ videoUrl: null, videoFile: null, videoMeta: null, videoLoading: false, videoProgress: 0, videoAbort: null });
+    set({ videoUrl: null, videoFile: null, videoMeta: null, videoLoading: false, videoProgress: 0, videoConverting: null, videoAbort: null });
   },
 
   /**
@@ -240,11 +244,57 @@ export const useStore = create((set, get) => ({
       videoMeta: null,
       videoLoading: false,
       videoProgress: 1,
+      videoConverting: null,
       videoAbort: null,
       currentTime: 0,
       playing: false,
       seekRequest: null,
     });
+    get().ensurePlayable(filename);
+  },
+
+  /**
+   * Keep a clip watchable whatever it was shot in.
+   *
+   * A codec the browser cannot decode - HEVC, 10-bit, 4:2:2, MPEG-4 - reads as
+   * a correct duration over a black picture, which is indistinguishable from a
+   * broken app. The server probes the clip and, when it genuinely cannot be
+   * shown, builds an H.264 proxy and serves that instead. This polls the build:
+   * while it runs the stage says "Converting…", and the moment it lands we
+   * re-point the element at the same URL so the picture appears. A clip that is
+   * already playable never gets here - the probe reports 'none' and we stop.
+   */
+  ensurePlayable: async (filename) => {
+    if (!filename) return;
+    const still = () => get().project?.video?.filename === filename || get().videoFile?.name === filename;
+    for (;;) {
+      let st;
+      try {
+        st = await api.proxyState(filename);
+      } catch {
+        return; // status endpoint unreachable - leave the original playing
+      }
+      if (!still()) return; // annotator moved to another clip
+
+      if (st.state === 'encoding') {
+        set({ videoConverting: { pct: st.pct ?? null } });
+        await sleep(1500);
+        continue;
+      }
+
+      const wasConverting = Boolean(get().videoConverting);
+      set({ videoConverting: null });
+      if (st.state === 'ready' && wasConverting) {
+        // The proxy just replaced the original; the element still holds the
+        // black original, so bust its cache to pull the playable bytes.
+        set({ videoUrl: `${api.videoStreamUrl(filename)}&r=${Date.now()}` });
+      } else if (st.state === 'failed') {
+        get().toast('Could not convert this clip for playback - check the server log', 'error');
+      } else if (st.state === 'unavailable') {
+        get().toast('Install ffmpeg on the host to play this clip', 'error');
+      }
+      return;
+    }
   },
 
   /**

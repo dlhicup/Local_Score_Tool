@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "proxies": "node scripts/build-proxies.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
