@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import { LABEL_META, labelTitle } from '../lib/labels';
 import { timecode } from '../lib/format';
+import { REPORTING_FPS, toFrame } from '../lib/fps';
 import ReadOnlyTimeline from '../components/ReadOnlyTimeline';
 
 /**
@@ -78,6 +79,11 @@ export default function Exam() {
     return () => { live = false; };
   }, [sel, toast]);
 
+  // Playback speed, same five steps and same 1-5 keys as the workspace.
+  const RATES = [0.25, 0.5, 1, 1.5, 2];
+  const [rate, setRate] = useState(1);
+  useEffect(() => { if (video.current) video.current.playbackRate = rate; }, [rate, sel]);
+
   const seek = useCallback((seconds) => {
     const v = video.current;
     if (!v) return;
@@ -93,12 +99,26 @@ export default function Exam() {
     else v.pause();
   }, []);
 
+  /**
+   * Step whole frames on the 25 fps reporting clock — the same movement the
+   * annotate workspace makes.
+   *
+   * Snapping to the grid is the point. Adding 1/25 to whatever currentTime
+   * happens to be lets the position sit between frames: the decoder lands on
+   * the nearest real frame it has, and on 29.97 fps footage two consecutive
+   * presses can land on the same one. Measured over twelve presses the old
+   * arithmetic produced 76,77,78,78,79,... - ten presses advanced eight
+   * frames, and the repeats read as a dead arrow key. Rounding to a frame
+   * number first makes every press move exactly one frame.
+   */
   const step = useCallback((frames) => {
     const v = video.current;
     if (!v) return;
     v.pause();
-    v.currentTime = Math.max(0, Math.min(duration, v.currentTime + frames / 25));
-    setNow(v.currentTime);
+    const f = Math.max(0, Math.round(v.currentTime * REPORTING_FPS) + frames);
+    const t = Math.min(duration || Infinity, f / REPORTING_FPS);
+    v.currentTime = t;
+    setNow(t);
   }, [duration]);
 
   // Jump to the previous / next reference action from the playhead.
@@ -145,9 +165,17 @@ export default function Exam() {
         case '-':
         case '_':
           e.preventDefault(); return zoomBy(1 / 1.4);
+        case ',':
+          e.preventDefault(); return step(-1);
+        case '.':
+          e.preventDefault(); return step(1);
         case '0':
           e.preventDefault(); return resetZoom();
         default:
+      }
+      if (['1', '2', '3', '4', '5'].includes(e.key)) {
+        e.preventDefault();
+        setRate(RATES[Number(e.key) - 1]);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -298,6 +326,15 @@ export default function Exam() {
                       <button onClick={() => step(1)} title="Forward one frame (→ · Shift+→ one second)" className="rounded-lg p-2 text-white transition hover:bg-white/10"><ChevronRight size={17} /></button>
                       <span className="ml-2 font-mono text-xs text-white tabular">{timecode(now)}</span>
                       <span className="font-mono text-xs text-ink-400 tabular">/ {timecode(duration, { ms: false })}</span>
+                      <span
+                        className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-2xs text-pitch-400"
+                        title={`frame ${toFrame(now)} on the ${REPORTING_FPS} fps reporting clock`}
+                      >
+                        f{toFrame(now)}
+                      </span>
+                      <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-2xs text-ink-300" title="Playback speed (1-5)">
+                        {rate}×
+                      </span>
                       <div className="flex-1" />
                       <div className="mr-1 flex items-center gap-0.5 rounded-lg border border-white/10 p-0.5">
                         <button onClick={() => zoomBy(1 / 1.4)} disabled={zoom <= 1} title="Zoom out (− or wheel down)"
