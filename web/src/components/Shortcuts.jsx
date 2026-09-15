@@ -22,7 +22,7 @@ const GROUPS = [
       ['Del', 'Delete selected · Esc clears a span'],
       ['[ ]', 'Nudge the selected action'],
       ['⌘/Ctrl Z', 'Undo · ⇧ to redo'],
-      ['⌘/Ctrl S', 'Save and open the next clip'],
+      ['⌘/Ctrl S', 'Save this clip’s ground truth'],
     ],
   },
 ];
