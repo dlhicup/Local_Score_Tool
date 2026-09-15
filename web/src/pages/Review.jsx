@@ -23,10 +23,15 @@ const NEAR = 0.6; // seconds either side of the playhead counted as "now"
 const LANE_H = 24;
 const RULER_H = 28;
 const TIMELINE_CHROME = 39; // toolbar row + the panel's top and bottom borders
+// How many lanes the strip makes room for before the lane area starts
+// scrolling. Sizing it to every lane a clip uses made the strip 400px tall on a
+// busy clip and squeezed the picture; the lane column already mirrors the
+// track's vertical scroll, so the rest are a short scroll away.
+const TIMELINE_VISIBLE_LANES = 6;
 // Never shorter than this (the toolbar plus a lane or two still has to read),
 // and never more than this share of the workspace, so the picture stays usable.
-const TIMELINE_MIN = 150;
-const TIMELINE_MAX_SHARE = '65%';
+const TIMELINE_MIN = 130;
+const TIMELINE_MAX_SHARE = '40%';
 
 export default function Review() {
   const { id } = useParams();
@@ -95,13 +100,14 @@ export default function Review() {
   const stats = useMemo(() => ({ total: events.length }), [events]);
 
   /**
-   * The timeline shows one lane per event type the clip actually uses, so its
-   * natural height grows with the work. A fixed 30% row cut the lanes off once
-   * a clip had more than about six types — the events were there, just scrolled
-   * out of sight. Size the row to its content instead, within bounds.
+   * The timeline shows one lane per event type the clip actually uses. Size
+   * the strip to those lanes up to TIMELINE_VISIBLE_LANES, so a clip using
+   * three types gets a compact strip rather than a fixed slab, and a clip using
+   * fourteen gets a readable one that scrolls rather than eating the picture.
    */
   const laneCount = useMemo(() => new Set(events.map((e) => e.type)).size, [events]);
-  const timelineRow = TIMELINE_CHROME + RULER_H + Math.max(laneCount, 1) * LANE_H;
+  const timelineRow =
+    TIMELINE_CHROME + RULER_H + Math.min(Math.max(laneCount, 1), TIMELINE_VISIBLE_LANES) * LANE_H;
 
   /** Move the selection through the list in timeline order and follow the video. */
   const stepSelection = useCallback(
