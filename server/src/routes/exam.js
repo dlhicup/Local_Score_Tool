@@ -116,16 +116,48 @@ router.get('/exam/:hash/video', requireAuth, async (req, res, next) => {
   try {
     const stat = await fs.stat(file);
     const etag = `"${stat.size}-${Math.floor(stat.mtimeMs)}"`;
-    const base = { 'Accept-Ranges': 'bytes', 'Content-Type': 'video/mp4', ETag: etag, 'Cache-Control': 'private, max-age=0, must-revalidate' };
+    const lastMod = new Date(stat.mtimeMs).toUTCString();
+    // Cached the same way the annotate route caches clips, and for the same
+    // reason: max-age=0/must-revalidate sent every range request to the
+    // network, and a revalidation carrying a Range is answered with bytes,
+    // never 304 - so the browser could reuse nothing it already held and each
+    // frame step paid a round trip. That is what made stepping here feel
+    // sluggish next to the workspace.
+    const base = {
+      'Accept-Ranges': 'bytes',
+      'Content-Type': 'video/mp4',
+      ETag: etag,
+      'Last-Modified': lastMod,
+      'Cache-Control': 'private, max-age=3600',
+    };
+
+    // A bare revalidation may be answered "unchanged". A *range* request may
+    // not: the player is asking for bytes it does not have, and a bodyless 304
+    // leaves it with nothing to play.
+    if (!req.headers.range && req.headers['if-none-match'] === etag) {
+      res.writeHead(304, base);
+      return res.end();
+    }
 
     const send = (opts) => {
       const s = createReadStream(file, opts);
-      s.on('error', () => res.end());
+      // .pipe() forwards neither source errors nor client aborts, so an
+      // unhandled read error would take the process down and every abandoned
+      // seek would leak a file descriptor.
+      s.on('error', (e) => {
+        if (!res.headersSent) res.status(500);
+        res.end();
+        if (e.code !== 'ENOENT') console.error('exam video read failed:', e.message);
+      });
       res.on('close', () => s.destroy());
       s.pipe(res);
     };
 
-    const range = req.headers.range;
+    // A resume is only valid against the same bytes; if the file changed under
+    // the client, ignore the range and send the whole thing afresh.
+    const ifRange = req.headers['if-range'];
+    const rangeOk = !ifRange || ifRange === etag || ifRange === lastMod;
+    const range = rangeOk ? req.headers.range : null;
     if (!range) {
       res.writeHead(200, { ...base, 'Content-Length': stat.size });
       return send();
