@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import { listProjects, readProject, writeProject, deleteProject, emptyProject, newId, idForVideo } from '../services/store.js';
 import { VIDEO_DIR } from './videos.js';
 import { summarise } from '../services/merge.js';
-import { writeGroundTruth, removeGroundTruth, groundTruthExists, GT_DIR } from '../services/gtfile.js';
+import { writeGroundTruth, removeGroundTruth, groundTruthExists, eventsFromGroundTruth, GT_DIR } from '../services/gtfile.js';
 import { getAssignments } from '../services/users.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -77,7 +77,12 @@ async function resolveProject(id) {
     const names = await fs.readdir(VIDEO_DIR).catch(() => []);
     const filename = names.find((n) => idForVideo(n) === id);
     if (!filename) throw err;
-    const project = { ...emptyProject({ name: filename, video: { filename } }), id };
+    // The record is gone but the deliverable may not be - that combination is
+    // work that is still on disk yet invisible in the app. Seed from it rather
+    // than opening an empty workspace over the top of it.
+    const recovered = await eventsFromGroundTruth(filename);
+    const project = { ...emptyProject({ name: filename, video: { filename } }), id, events: recovered };
+    if (recovered.length) console.log(`recovered ${recovered.length} actions for ${filename} from its ground-truth file`);
     await writeProject(project);
     // Written so the URL keeps working, but nothing has been saved yet: there
     // is no ground truth here for a delete to remove.

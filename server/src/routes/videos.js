@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listProjects, readProject, writeProject, emptyProject, idForVideo, deleteProject } from '../services/store.js';
 import { getAssignments, assignClips } from '../services/users.js';
-import { removeGroundTruth } from '../services/gtfile.js';
+import { removeGroundTruth, eventsFromGroundTruth } from '../services/gtfile.js';
 import { ensureProxy, proxyState, removeProxy } from '../services/proxy.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -321,9 +321,14 @@ router.post('/videos/:name/open', requireAuth, async (req, res, next) => {
     const existing = await readProject(id).catch(() => null);
     if (existing) return res.json({ project: existing, created: false });
 
+    // Same recovery as resolveProject: a deliverable without a record is
+    // annotations that exist on disk but would otherwise open empty.
+    const recovered = await eventsFromGroundTruth(name);
+    if (recovered.length) console.log(`recovered ${recovered.length} actions for ${name} from its ground-truth file`);
     const project = {
       ...emptyProject({ name, video: { filename: name, size: stat.size, ...(req.body?.video ?? {}) } }),
       id,
+      events: recovered,
     };
     await writeProject(project);
     res.status(201).json({ project, created: true });

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { isValidLabel } from '../labels.js';
 import { writeFileAtomic } from './atomic.js';
@@ -86,6 +87,49 @@ export async function removeGroundTruth(videoName) {
 }
 
 export { GT_DIR };
+
+/**
+ * Read a clip's deliverable back as annotate-ready events.
+ *
+ * The deliverable is normally write-only: data/<id>.json is what the app
+ * loads, and this file is the hand-off copy. That asymmetry has one bad
+ * failure though - if the working record is lost or reset while the
+ * deliverable survives, the annotations are still on disk but the workspace
+ * opens empty, and nothing in the app can bring them back.
+ *
+ * So a clip whose record is missing is seeded from here. Frame numbers are on
+ * the 25 fps reporting clock, which is the only precision the file carries;
+ * timestamps come back quantised to that grid.
+ *
+ * Returns [] when there is no deliverable or it cannot be read - never throws,
+ * because this runs on the path that opens a clip.
+ */
+export async function eventsFromGroundTruth(videoName) {
+  const target = fileFor(videoName);
+  if (!target) return [];
+  let doc;
+  try {
+    doc = JSON.parse(await fs.readFile(target, 'utf8'));
+  } catch {
+    return []; // absent, or hand-edited into something unparseable
+  }
+  const rows = Array.isArray(doc) ? doc : doc?.groundtruth ?? [];
+  return rows
+    .filter((r) => isValidLabel(r?.action) && Number.isFinite(Number(r?.frame)))
+    .map((r) => ({
+      id: `evt_${crypto.randomBytes(6).toString('hex')}`,
+      type: r.action,
+      timestamp: Number((Number(r.frame) / REPORTING_FPS).toFixed(3)),
+      endTimestamp: 0,
+      team: null,
+      player: null,
+      confidence: 1,
+      source: 'human',
+      status: 'accepted',
+      description: '',
+      agreement: 1,
+    }));
+}
 
 /** Whether a clip's deliverable is on disk right now. */
 export async function groundTruthExists(videoName) {
