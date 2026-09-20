@@ -313,9 +313,9 @@ export default function Review() {
         x={menu?.x ?? 0}
         y={menu?.y ?? 0}
         atTime={menu?.atTime ?? 0}
-        onPick={(label, at) => {
-          addEvent(label, at);
-          toast(`${labelTitle(label)} at ${at.toFixed(2)}s`, 'success');
+        onPick={(label, at, team) => {
+          addEvent(label, at, team ? { team } : {});
+          toast(`${labelTitle(label)}${team ? ` · ${team}` : ''} at ${at.toFixed(2)}s`, 'success');
         }}
         onClose={() => setMenu(null)}
       />

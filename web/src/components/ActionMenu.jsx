@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { EVENT_LABELS, LABEL_META, LABEL_GROUPS, labelTitle } from '../lib/labels';
+import { EVENT_LABELS, LABEL_META, LABEL_GROUPS, labelTitle, TEAM_A, TEAM_B, TEAM_META } from '../lib/labels';
 import { useStore } from '../store/useStore';
 import { seconds2 } from '../lib/format';
 
@@ -77,6 +77,9 @@ export default function ActionMenu({ open, x, y, atTime, onPick, onClose }) {
           <div className="border-b border-white/[0.07] px-3 py-2">
             <p className="text-2xs font-semibold uppercase tracking-wider text-ink-500">Add action at</p>
             <p className="font-mono text-sm font-bold text-pitch-400">{seconds2(atTime)}</p>
+            <p className="mt-0.5 text-2xs leading-snug text-ink-600">
+              Click a row to add it untagged, or pick a side to tag it as you add.
+            </p>
           </div>
 
           <div className="max-h-[340px] overflow-y-auto py-1">
@@ -86,20 +89,48 @@ export default function ActionMenu({ open, x, y, atTime, onPick, onClose }) {
               return (
                 <div key={g}>
                   <p className="px-3 pb-0.5 pt-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">{g}</p>
-                  {inGroup.map((l) => (
-                    <button
-                      key={l}
-                      onClick={() => {
-                        onPick(l, atTime);
-                        onClose();
-                      }}
-                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition hover:bg-white/[0.07]"
-                    >
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: LABEL_META[l].color }} />
-                      <span className="flex-1 truncate text-xs text-ink-100">{labelTitle(l)}</span>
-                      {hotkeyFor(l) && <span className="kbd uppercase">{hotkeyFor(l)}</span>}
-                    </button>
-                  ))}
+                  {inGroup.map((l) => {
+                    const add = (team) => { onPick(l, atTime, team); onClose(); };
+                    return (
+                      // A row, not a button: the two side buttons sit inside it
+                      // and a button cannot legally nest inside another.
+                      <div
+                        key={l}
+                        className="group flex w-full items-center gap-2.5 px-3 py-1.5 transition hover:bg-white/[0.07]"
+                      >
+                        <button
+                          onClick={() => add(undefined)}
+                          title={`Add ${labelTitle(l)} with no team yet`}
+                          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                        >
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: LABEL_META[l].color }} />
+                          <span className="flex-1 truncate text-xs text-ink-100">{labelTitle(l)}</span>
+                        </button>
+
+                        {/* The side buttons take the row's width back from the
+                            hotkey chip only while the row is hovered, so the
+                            menu reads the same as before at rest. */}
+                        <span className="flex shrink-0 items-center gap-1">
+                          {[TEAM_A, TEAM_B].map((team) => (
+                            <button
+                              key={team}
+                              onClick={() => add(team)}
+                              title={`Add ${labelTitle(l)} as ${TEAM_META[team].label}`}
+                              className="hidden h-5 w-5 items-center justify-center rounded border text-2xs font-bold transition group-hover:flex hover:brightness-125"
+                              style={{
+                                color: TEAM_META[team].color,
+                                borderColor: `${TEAM_META[team].color}55`,
+                                background: `${TEAM_META[team].color}1a`,
+                              }}
+                            >
+                              {TEAM_META[team].short}
+                            </button>
+                          ))}
+                          {hotkeyFor(l) && <span className="kbd uppercase group-hover:hidden">{hotkeyFor(l)}</span>}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
