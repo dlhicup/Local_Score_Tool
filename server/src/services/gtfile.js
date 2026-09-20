@@ -17,9 +17,10 @@ import { writeFileAtomic } from './atomic.js';
  * as an empty workspace, with no way inside the product to get the work back.
  *
  * Now there is one file per clip and the app reads and writes it directly, so
- * what the annotator sees and what gets handed off cannot drift apart. Per-clip
- * bookkeeping that does not belong in a deliverable (review verdicts,
- * timestamps) lives in a small sidecar; see clips.js.
+ * what the annotator sees and what gets handed off cannot drift apart. The few
+ * things the studio keeps beside the actions — who annotated the clip, a
+ * review verdict — are sibling keys in the same file, so they travel with it
+ * when it is copied somewhere else. There is no second folder to keep in step.
  *
  * Frame numbers are on the fixed 25 fps reporting clock, never the source
  * video's own rate. That clock is the file's only precision: a timestamp read
@@ -187,11 +188,22 @@ export async function writeEvents(videoName, events, extraKeys = {}) {
     .sort((a, b) => a.row.frame - b.row.frame || a.i - b.i)
     .map(({ row }) => row);
 
-  const body = Object.keys(extraKeys).length
-    ? `${JSON.stringify({ ...extraKeys, groundtruth: rows }, null, 2)}\n`
-    : rows.length
-      ? `{"groundtruth":[\n${rows.map((r) => `  ${JSON.stringify(r)}`).join(',\n')}\n]}\n`
-      : '{"groundtruth":[]}\n';
+  // One action per line, whether or not the file carries other keys. Letting
+  // JSON.stringify indent the array puts every field of every action on its
+  // own line, which turns a readable 500-line file into a 4,000-line one and
+  // a diff between two saves into noise.
+  const hasExtra = Object.keys(extraKeys).length > 0;
+  const rowIndent = hasExtra ? '    ' : '  ';
+  const closeIndent = hasExtra ? '  ' : '';
+  const list = rows.length
+    ? `[\n${rows.map((r) => rowIndent + JSON.stringify(r)).join(',\n')}\n${closeIndent}]`
+    : '[]';
+
+  const body = hasExtra
+    ? `{\n${Object.entries(extraKeys)
+        .map(([k, v]) => `  ${JSON.stringify(k)}: ${JSON.stringify(v, null, 2).split('\n').join('\n  ')}`)
+        .join(',\n')},\n  "groundtruth": ${list}\n}\n`
+    : `{"groundtruth":${list}}\n`;
 
   await fs.mkdir(GT_DIR, { recursive: true });
   // Write-then-rename so a crash cannot leave a half-written file.

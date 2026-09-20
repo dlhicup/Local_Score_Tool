@@ -9,12 +9,11 @@ import { fileURLToPath } from 'node:url';
 import metaRoutes from './routes/meta.js';
 import authRoutes from './routes/auth.js';
 import { withUser } from './middleware/auth.js';
-import { ensureSeedAdmin } from './services/users.js';
 import projectRoutes from './routes/projects.js';
 import videoRoutes from './routes/videos.js';
 import examRoutes from './routes/exam.js';
 import reviewRoutes from './routes/review.js';
-import { DATA_DIR, VIDEO_DIR, migrateLegacyRecords } from './services/store.js';
+import { VIDEO_DIR } from './services/store.js';
 import { GT_DIR } from './services/gtfile.js';
 
 const app = express();
@@ -47,7 +46,7 @@ app.use(express.json({ limit: process.env.JSON_LIMIT || '96mb' }));
 
 app.use(withUser);
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, dataDir: DATA_DIR }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, groundTruthDir: GT_DIR }));
 
 /**
  * The build currently on disk. A page whose own build id differs is running
@@ -104,23 +103,8 @@ app.use((err, _req, res, _next) => {
 
 // A locked users.json must not stop the server booting: the store is re-read
 // on every request, so seeding can simply be retried on the next start.
-// Move anything still in the old two-file layout across before serving.
-await migrateLegacyRecords().catch((err) => console.error(`legacy migration failed: ${err.message}`));
-
-const seeded = await ensureSeedAdmin().catch((err) => {
-  console.error(`Could not seed the first admin account: ${err.message}`);
-  return null;
-});
-if (seeded) {
-  console.log('');
-  console.log('  Created the first admin account (sign in with just this username):');
-  console.log(`    username: ${seeded.username}`);
-  console.log('');
-}
-
 app.listen(PORT, HOST, () => {
   console.log(`Score GT API  →  http://${HOST}:${PORT}`);
-  console.log(`Clip metadata →  ${DATA_DIR}`);
   console.log(`Video tasks   →  ${VIDEO_DIR}`);
   console.log(`Ground truth  →  ${GT_DIR}`);
 });

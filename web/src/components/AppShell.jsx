@@ -138,8 +138,16 @@ export default function AppShell({ children }) {
                 </button>
               )}
 
-              {/* Save writes this clip's ground truth and stays put. */}
-              <button onClick={() => save().catch(() => {})} disabled={!dirty} className={dirty ? 'btn-primary' : 'btn-ghost'}>
+              {/* Save writes this clip's ground truth and stays put.
+                  Never disabled: a clip whose actions were loaded from a file
+                  someone else wrote has nothing "dirty" about it, and a Save
+                  button that does nothing when pressed is indistinguishable
+                  from one that is broken. Pressing it always writes the file. */}
+              <button
+                onClick={() => save().catch(() => {})}
+                title={dirty ? 'Save this clip’s ground truth' : 'Write the ground-truth file again'}
+                className={dirty ? 'btn-primary' : 'btn-ghost'}
+              >
                 <Save size={15} />
                 {dirty ? 'Save' : 'Saved'}
               </button>

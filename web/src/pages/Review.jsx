@@ -130,8 +130,8 @@ export default function Review() {
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault();
         // The same action as the Save button: write this clip's ground truth
-        // and stay on it. With nothing to save there is nothing to do.
-        if (!dirty) return;
+        // and stay on it. Allowed even when nothing has changed, so the file
+        // can always be (re)written on demand.
         return saveProject().catch(() => {});
       }
       if (mod && e.key.toLowerCase() === 'z') {

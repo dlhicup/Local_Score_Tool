@@ -4,6 +4,7 @@ import { EVENT_LABELS, LABEL_META, EVENT_TAG_DEFAULTS } from '../lib/labels';
 import { saveVideo, loadVideo } from '../lib/db';
 
 const SETTINGS_KEY = 'scoregt.settings';
+const HOTKEYS_KEY = 'scoregt.hotkeys';
 
 // Bumped whenever the defaults below change meaningfully, so an existing
 // browser picks up the new tuning instead of silently keeping the old one.
@@ -44,8 +45,20 @@ export const useStore = create((set, get) => ({
   user: null,
   authChecked: false,
 
-  /** Restore a session on load; a dead token drops straight to sign-in. */
-  restoreSession: () => set({ user: { username: 'local', role: 'admin' }, authChecked: true }),
+  /**
+   * There is no session to restore — no sign-in, no accounts. The only
+   * per-person setting is the hotkey map, which is a preference of this
+   * browser rather than of an account, so it lives in localStorage.
+   */
+  restoreSession: () => {
+    let hotkeys = {};
+    try {
+      hotkeys = JSON.parse(localStorage.getItem(HOTKEYS_KEY) || '{}') || {};
+    } catch {
+      hotkeys = {};
+    }
+    set({ user: { username: 'local', role: 'admin', hotkeys }, authChecked: true });
+  },
 
   signIn: async (username) => {
     const { token, user } = await api.login(username);
@@ -84,7 +97,13 @@ export const useStore = create((set, get) => ({
   hotkeyFor: (label) => (get().user?.hotkeys?.[label] ?? LABEL_META[label]?.key ?? '').toLowerCase(),
 
   saveHotkeys: async (hotkeys) => {
-    const { user } = await api.saveHotkeys(hotkeys);
+    const map = hotkeys && typeof hotkeys === 'object' ? hotkeys : {};
+    try {
+      localStorage.setItem(HOTKEYS_KEY, JSON.stringify(map));
+    } catch {
+      // A browser with storage blocked still gets the change for this session.
+    }
+    const user = { ...(get().user ?? { username: 'local', role: 'admin' }), hotkeys: map };
     set({ user });
     return user;
   },

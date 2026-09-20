@@ -1,237 +1,115 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { writeFileAtomic } from './atomic.js';
+import { allAnnotators, setAnnotator, listClipNames } from './store.js';
 
 /**
- * Users, sessions and clip assignments — all file-backed like the rest.
+ * Annotators, derived rather than stored.
  *
- * Passwords are stored as scrypt hashes with a per-user salt, never in the
- * clear and never reversible. Sessions are stateless HMAC-signed tokens so a
- * restart does not log everyone out, and carry an expiry so a leaked one dies.
+ * There is no sign-in on this tool and never was any real account: everyone
+ * who reaches the server has full access. What the studio actually needs is a
+ * name against a clip, so that a reviewer can see whose work they are looking
+ * at — and that name now lives in the clip's own ground-truth file, under
+ * `annotator`.
+ *
+ * So the list of people is simply the set of names appearing across the
+ * folder. Nothing is written to a user database, because there isn't one: a
+ * name comes into existence the moment a clip is assigned to it, and goes when
+ * its last clip is reassigned. That is what makes a folder of ground-truth
+ * files self-describing — copy someone's file in and their name comes with it.
  */
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const DATA_DIR = path.resolve(ROOT, process.env.DATA_DIR || 'data');
-const USERS = path.join(DATA_DIR, 'users.json');
-const SECRET_FILE = path.join(DATA_DIR, '.session-secret');
-
-await fs.mkdir(DATA_DIR, { recursive: true });
-
 export const ROLES = ['admin', 'annotator'];
-const SESSION_DAYS = 14;
 
-/** A signing secret that survives restarts, generated once if absent. */
-async function loadSecret() {
-  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
-  const existing = await fs.readFile(SECRET_FILE, 'utf8').catch(() => null);
-  if (existing?.trim()) return existing.trim();
-  const generated = crypto.randomBytes(32).toString('hex');
-  await fs.writeFile(SECRET_FILE, generated, { mode: 0o600 });
-  return generated;
-}
-const SECRET = await loadSecret();
-
-// ---------------------------------------------------------------- passwords
-
-function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
-  const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
-  return { salt, hash };
-}
-
-function verifyPassword(password, salt, expected) {
-  const actual = crypto.scryptSync(String(password), salt, 64).toString('hex');
-  // Constant-time: a length-varying compare leaks how much of the hash matched.
-  const a = Buffer.from(actual, 'hex');
-  const b = Buffer.from(expected, 'hex');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
-// -------------------------------------------------------------------- store
-
-const EMPTY = { schema: 'score-gt/users-1.0', users: [], assignments: {} };
-
-async function load() {
-  const raw = await fs.readFile(USERS, 'utf8').catch(() => null);
-  if (!raw) return { ...EMPTY };
-  try {
-    const j = JSON.parse(raw);
-    return {
-      ...EMPTY,
-      ...j,
-      users: Array.isArray(j.users) ? j.users : [],
-      assignments: j.assignments && typeof j.assignments === 'object' ? j.assignments : {},
-    };
-  } catch {
-    await fs.rename(USERS, `${USERS}.corrupt-${Date.now()}`).catch(() => {});
-    return { ...EMPTY };
-  }
-}
-
-let queue = Promise.resolve();
-const save = (doc) => writeFileAtomic(USERS, JSON.stringify(doc, null, 2));
-
-/** Serialised so two writes cannot clobber each other. */
-function withStore(fn) {
-  // Serialise reads-modify-writes so two admin actions cannot both load, edit,
-  // and save over each other. The caller gets THEIR operation's result; the
-  // shared chain swallows failures (.catch) so one rejected operation — an
-  // assign to a mistyped name, a duplicate-user 409 — cannot poison the queue
-  // and freeze every later write until the process restarts.
-  const result = queue.then(async () => {
-    const doc = await load();
-    // Only write when the operation actually changed something. Seeding on a
-    // store that already has an admin changes nothing, and rewriting the file
-    // on every start is both pointless and — on Windows, where a rename can
-    // lose a race with a virus scanner — the write most likely to fail.
-    const before = JSON.stringify(doc);
-    const r = await fn(doc);
-    if (JSON.stringify(doc) !== before) await save(doc);
-    return r;
-  });
-  queue = result.catch(() => {});
-  return result;
-}
-
-const publicUser = (u) => ({ username: u.username, role: u.role, createdAt: u.createdAt, hotkeys: u.hotkeys ?? {} });
-
-// ------------------------------------------------------------------ seeding
+/** The one implicit account. Everyone who reaches the server is this. */
+const LOCAL = { username: 'local', role: 'admin', createdAt: null, hotkeys: {} };
 
 /**
- * A fresh install has no users, which would lock everyone out. Seed one admin
- * so the first sign-in is possible, and print the password once.
+ * Everyone named by a clip, plus the local account. Ordered with the busiest
+ * first, which is the order the assignment page wants anyway.
  */
-export async function ensureSeedAdmin() {
-  return withStore(async (doc) => {
-    if (doc.users.length) return null;
-    const username = process.env.ADMIN_USER || 'admin';
-    doc.users.push({ username, role: 'admin', createdAt: new Date().toISOString(), hotkeys: {} });
-    return { username, generated: false };
-  });
-}
-
-// ------------------------------------------------------------------ queries
-
 export async function listUsers() {
-  const doc = await load();
-  return doc.users.map(publicUser);
+  const byClip = await allAnnotators();
+  const counts = {};
+  for (const name of Object.values(byClip)) counts[name] = (counts[name] ?? 0) + 1;
+  const people = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([username]) => ({ username, role: 'annotator', createdAt: null, hotkeys: {} }));
+  return [LOCAL, ...people];
 }
 
 export async function getUser(username) {
-  const doc = await load();
-  const u = doc.users.find((x) => x.username === username);
-  return u ? publicUser(u) : null;
+  return (await listUsers()).find((u) => u.username === username) ?? null;
 }
 
-export async function authenticate(username, password) {
-  const doc = await load();
-  // Local team tool: no passwords. Signing in is just claiming a username that
-  // the admin has created; identity drives assignments, not secrecy.
-  const u = doc.users.find((x) => x.username.toLowerCase() === String(username || '').trim().toLowerCase());
-  return u ? publicUser(u) : null;
+/** No passwords, no accounts — claiming a name is all signing in ever was. */
+export async function authenticate(username) {
+  const name = String(username || '').trim();
+  return name ? { username: name, role: 'admin', createdAt: null, hotkeys: {} } : null;
 }
 
+/**
+ * There is no user store to add to. A name becomes real when a clip is
+ * assigned to it, so this just validates and hands the name back — the
+ * assignment page then shows it with nothing against it yet.
+ */
 export async function createUser({ username, role }) {
   const name = String(username || '').trim();
-  if (!/^[A-Za-z0-9._-]{2,32}$/.test(name)) throw Object.assign(new Error('Username must be 2-32 chars: letters, digits, . _ -'), { status: 400 });
-  if (!ROLES.includes(role)) throw Object.assign(new Error('Role must be admin or annotator'), { status: 400 });
-
-  return withStore(async (doc) => {
-    if (doc.users.some((u) => u.username.toLowerCase() === name.toLowerCase())) {
-      throw Object.assign(new Error('That username is taken'), { status: 409 });
-    }
-    const u = { username: name, role, createdAt: new Date().toISOString(), hotkeys: {} };
-    doc.users.push(u);
-    return publicUser(u);
-  });
+  if (!/^[A-Za-z0-9._ -]{2,32}$/.test(name)) {
+    throw Object.assign(new Error('Name must be 2-32 chars: letters, digits, spaces, . _ -'), { status: 400 });
+  }
+  if (role && !ROLES.includes(role)) throw Object.assign(new Error('Role must be admin or annotator'), { status: 400 });
+  return { username: name, role: role ?? 'annotator', createdAt: null, hotkeys: {} };
 }
 
-export async function updateUser(username, { role }) {
-  return withStore(async (doc) => {
-    const u = doc.users.find((x) => x.username === username);
-    if (!u) throw Object.assign(new Error('No such user'), { status: 404 });
-
-    if (role) {
-      if (!ROLES.includes(role)) throw Object.assign(new Error('Bad role'), { status: 400 });
-      // Never let the last admin demote themselves into a locked-out system.
-      const admins = doc.users.filter((x) => x.role === 'admin');
-      if (u.role === 'admin' && role !== 'admin' && admins.length === 1) {
-        throw Object.assign(new Error('This is the only admin — promote someone else first'), { status: 400 });
-      }
-      u.role = role;
-    }
-    return publicUser(u);
-  });
+/** Nothing to update: a name carries no state of its own. */
+export async function updateUser(username) {
+  return getUser(username);
 }
 
-export async function setHotkeys(username, hotkeys) {
-  return withStore(async (doc) => {
-    const u = doc.users.find((x) => x.username === username);
-    if (!u) throw Object.assign(new Error('No such user'), { status: 404 });
-    u.hotkeys = hotkeys && typeof hotkeys === 'object' ? hotkeys : {};
-    return publicUser(u);
-  });
-}
-
+/** Remove a name by releasing every clip that carries it. */
 export async function deleteUser(username) {
-  return withStore(async (doc) => {
-    const u = doc.users.find((x) => x.username === username);
-    if (!u) return;
-    if (u.role === 'admin' && doc.users.filter((x) => x.role === 'admin').length === 1) {
-      throw Object.assign(new Error('Cannot delete the only admin'), { status: 400 });
-    }
-    doc.users = doc.users.filter((x) => x.username !== username);
-    // Their assignments go back to unassigned rather than pointing at a ghost.
-    for (const clip of Object.keys(doc.assignments)) {
-      if (doc.assignments[clip] === username) delete doc.assignments[clip];
-    }
-  });
-}
-
-// -------------------------------------------------------------- assignments
-
-export async function getAssignments() {
-  return (await load()).assignments;
-}
-
-/** Assign clips to a user, or pass null to clear them. */
-export async function assignClips(clips, username) {
-  return withStore(async (doc) => {
-    if (username && !doc.users.some((u) => u.username === username)) {
-      throw Object.assign(new Error('No such user'), { status: 404 });
-    }
-    for (const c of clips) {
-      const name = path.basename(String(c));
-      if (username) doc.assignments[name] = username;
-      else delete doc.assignments[name];
-    }
-    return doc.assignments;
-  });
-}
-
-// ----------------------------------------------------------------- sessions
-
-export function issueToken(user) {
-  const payload = { u: user.username, r: user.role, exp: Date.now() + SESSION_DAYS * 864e5 };
-  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
-  return `${body}.${sig}`;
-}
-
-export function readToken(token) {
-  const [body, sig] = String(token || '').split('.');
-  if (!body || !sig) return null;
-  const expected = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    if (!payload.exp || payload.exp < Date.now()) return null;
-    return { username: payload.u, role: payload.r };
-  } catch {
-    return null;
+  const byClip = await allAnnotators();
+  for (const [clip, owner] of Object.entries(byClip)) {
+    if (owner === username) await setAnnotator(clip, null);
   }
 }
 
-export { USERS };
+/**
+ * Hotkeys are a per-person preference on a tool with no accounts, so they
+ * belong in the browser, not on the server. The client keeps them; this
+ * endpoint stays so an older page does not error, and reports them back.
+ */
+export async function setHotkeys(username, hotkeys) {
+  return { username, role: 'admin', createdAt: null, hotkeys: hotkeys && typeof hotkeys === 'object' ? hotkeys : {} };
+}
+
+// ------------------------------------------------------------- assignments
+
+export async function getAssignments() {
+  return allAnnotators();
+}
+
+/** Assign clips to a name, or pass null to release them. */
+export async function assignClips(clips, username) {
+  const known = new Set(await listClipNames());
+  for (const c of clips ?? []) {
+    const name = String(c);
+    if (known.has(name)) await setAnnotator(name, username || null);
+  }
+  return allAnnotators();
+}
+
+// ----------------------------------------------------------------- sessions
+//
+// Kept as no-ops: nothing reads a token (withUser hands every request the same
+// local admin), and there is no secret to sign with now that data/ is gone.
+
+export function issueToken(user) {
+  return `local.${encodeURIComponent(user?.username ?? 'local')}`;
+}
+
+export function readToken() {
+  return { username: 'local', role: 'admin' };
+}
+
+/** A fresh install needs no seeding: there is no store to seed. */
+export async function ensureSeedAdmin() {
+  return null;
+}

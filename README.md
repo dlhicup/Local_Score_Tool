@@ -331,9 +331,26 @@ the clip is saved. A bad value in any tag is repaired to the default rather
 than dropping the action. Both `{"groundtruth": [...]}` and a bare array are
 accepted.
 
-**Per-clip bookkeeping** — review verdicts and edit timestamps — lives in
-`data/clips.json`, deliberately outside the deliverable so nothing downstream
-has to step over it. Losing it costs nothing that matters.
+**Everything about a clip is in that one file.** Alongside `groundtruth` it may
+carry two more keys, both optional:
+
+```json
+{
+  "annotator": "Dmytro",
+  "review": {"verdict": "flagged", "reason": "mistimed", "note": "…", "reviewer": "local", "at": "…"},
+  "groundtruth": [ … ]
+}
+```
+
+That is what makes reviewing someone else's work a copy: **drop their
+`<clip name>.json` into `groundtruth/`, put the clip in `video/`, and open
+it** — their actions, their name and any verdict come with the file. There is
+nothing to import and no second folder to keep in step. Anything else already
+in the file that this tool does not recognise is preserved on save, so a field
+another tool added is never dropped.
+
+Edit times come from the file's own timestamps, and duration and frame size are
+read from the video, so nothing has to be cached anywhere.
 
 ## Kit colours (`kits.json`)
 
@@ -395,13 +412,12 @@ something, copy `.env.example` to `server/.env`.
 - `video/` — the shared clips (host-local, never in git)
 - `video-proxy/` — H.264 copies of only those clips a browser cannot decode
 - `exam/` — reference examples: `<name>.gt.json` + `<name>.mp4` pairs shown on the Reference page
-- `data/` — the user list and per-clip review verdicts (`clips.json`)
-- `groundtruth/` — **the annotations**: one `<clip name>.json` per clip
+- `groundtruth/` — **the annotations**: one `<clip name>.json` per clip, and the only state the tool keeps
 - `server/`, `web/` — the app
 
-Everything under `video/`, `video-proxy/`, `exam/`, `data/` and `groundtruth/`
-stays on the host and is kept out of the repo. **Back up `data/` and
-`groundtruth/`** — that's the team's work.
+Everything under `video/`, `video-proxy/`, `exam/` and `groundtruth/` stays on
+the host and is kept out of the repo. **Back up `groundtruth/`** — that is the
+team's work, and there is nothing else to back up.
 
 ## Development
 
