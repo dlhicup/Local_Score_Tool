@@ -189,7 +189,7 @@ an aerial duel whose two halves agree. Click a warning to jump to it.
 
 | key | sets |
 | --- | --- |
-| `z` `x` `c` | team: home · away · unknown |
+| `z` `x` `c` | team: Team A · Team B · unknown |
 | `b` | click the centre of the ball · `⇧B` marks it not visible |
 | `6` `7` `8` | sure: 1.0 · 0.7 · 0.3 |
 | `v` | body: foot → head → hand → other |
@@ -295,15 +295,15 @@ Every action carries the five tags:
 
 ```json
 {"groundtruth":[
-  {"frame":283,"action":"pass","team":"home","ball_xy":[1210,402],"sure":1,"body":"foot","goal_view":"left"},
-  {"frame":312,"action":"aerial_duel","team":"home","ball_xy":null,"sure":0.7,"body":"head","goal_view":"none"},
-  {"frame":312,"action":"aerial_duel","team":"away","ball_xy":null,"sure":0.7,"body":"head","goal_view":"none"}
+  {"frame":283,"action":"pass","team":"Team A","ball_xy":[1210,402],"sure":1,"body":"foot","goal_view":"left"},
+  {"frame":312,"action":"aerial_duel","team":"Team A","ball_xy":null,"sure":0.7,"body":"head","goal_view":"none"},
+  {"frame":312,"action":"aerial_duel","team":"Team B","ball_xy":null,"sure":0.7,"body":"head","goal_view":"none"}
 ]}
 ```
 
 | field | values | what it is |
 | --- | --- | --- |
-| `team` | `home` `away` `unknown` | the team of the player whose contact defines the frame — read off the shirt, never inferred from the direction of play |
+| `team` | `Team A` `Team B` `unknown` | the team of the player whose contact defines the frame — read off the shirt, never inferred from the direction of play |
 | `ball_xy` | `[x, y]` or `null` | the centre of the ball at that frame in the video's own pixels; `null` means not visible, which is an answer, not a gap |
 | `sure` | `1.0` `0.7` `0.3` | doubt about the **class or the timing**. Doubt about whether it happened at all means don't label it |
 | `body` | `foot` `head` `hand` `other` | the body part making the contact |
@@ -311,6 +311,14 @@ Every action carries the five tags:
 
 A `goal` that was an own goal also carries `"own_goal": true`; the team stays
 the credited (attacking) side.
+
+> **Note on `team`.** The labelling spec writes these two values as `home` and
+> `away`. This tool stores **`Team A`** and **`Team B`** instead, because the
+> corpus has no reliable home side and a neutral name stops the tag being
+> guessed from which end a team attacks. Anything consuming these files needs
+> to expect those strings. Reading is tolerant in both directions — `home`,
+> `away`, `team_a` and `team_b` are all accepted on the way in and rewritten to
+> the canonical pair on the next save — so older files load unchanged.
 
 Rows are in frame order, with events on the same frame keeping the order they
 were added — which is how an `aerial_duel` pair stays together.
@@ -328,9 +336,13 @@ has to step over it. Losing it costs nothing that matters.
 
 ## Kit colours (`kits.json`)
 
-The team tag is only resolvable if a reader can tell which shirt is home, so
+The team tag is only resolvable if a reader can tell the two sides apart, so
 put a `kits.json` at the project root and the colours appear beside the
-Home/Away buttons while annotating. Copy `kits.example.json` to start.
+Team A / Team B buttons while annotating. Copy `kits.example.json` to start.
+
+The kit file keeps the labelling spec's `home`/`away` keys: **`home` is Team A
+and `away` is Team B.** Which is which does not matter to the model, only that
+the same shirt is always the same letter within a clip.
 
 One match, exactly the shape from the labelling spec:
 

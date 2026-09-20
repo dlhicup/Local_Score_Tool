@@ -82,13 +82,21 @@ export const LABEL_DEFINITIONS = {
 // needs the same vocabulary to offer the choices.
 // ---------------------------------------------------------------------------
 
-/** The team of the player whose contact defines the event's frame. */
-export const TEAMS = ['home', 'away', 'unknown'];
+/**
+ * The team of the player whose contact defines the event's frame.
+ *
+ * Named neutrally rather than home/away: this corpus has no reliable home
+ * side, and a neutral name stops the tag being guessed from which end a team
+ * attacks. These strings are what gets stored.
+ */
+export const TEAM_A = 'Team A';
+export const TEAM_B = 'Team B';
+export const TEAMS = [TEAM_A, TEAM_B, 'unknown'];
 
 export const TEAM_META = {
-  home: { label: 'Home', short: 'H', color: '#38BDF8', key: 'z' },
-  away: { label: 'Away', short: 'A', color: '#FB923C', key: 'x' },
-  unknown: { label: 'Unknown', short: '?', color: '#64748B', key: 'c' },
+  [TEAM_A]: { label: 'Team A', short: 'A', color: '#38BDF8', key: 'z', kitKey: 'home' },
+  [TEAM_B]: { label: 'Team B', short: 'B', color: '#FB923C', key: 'x', kitKey: 'away' },
+  unknown: { label: 'Unknown', short: '?', color: '#64748B', key: 'c', kitKey: null },
 };
 
 /** Three anchored levels — a free value is not comparable between people. */
@@ -120,7 +128,7 @@ export const EVENT_TAG_DEFAULTS = {
 export function teamChecks(events) {
   const out = [];
   const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
-  const known = (e) => e.team === 'home' || e.team === 'away';
+  const known = (e) => e.team === TEAM_A || e.team === TEAM_B;
 
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];

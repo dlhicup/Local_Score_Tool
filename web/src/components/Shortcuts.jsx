@@ -16,7 +16,7 @@ const GROUPS = [
   {
     title: 'Tagging the action',
     items: [
-      ['z x c', 'Team: home · away · unknown — read the shirt, not the direction of play'],
+      ['z x c', 'Team: A · B · unknown — read the shirt, not the direction of play'],
       ['b', 'Click the centre of the ball · ⇧B marks it not visible'],
       ['6 7 8', 'Sure: 1.0 clear · 0.7 judgement call · 0.3 would not bet on it'],
       ['v', 'Body: foot → head → hand → other'],

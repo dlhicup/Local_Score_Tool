@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
-  isValidLabel, isTeam, isBody, isGoalView, isSure, isBallXY, EVENT_TAG_DEFAULTS,
+  isValidLabel, isBody, isGoalView, isSure, isBallXY, normaliseTeam, EVENT_TAG_DEFAULTS,
 } from '../labels.js';
 import { writeFileAtomic } from './atomic.js';
 
@@ -79,7 +79,7 @@ function eventFromRow(row) {
     id: uid(),
     type: row.action,
     timestamp: toSeconds(row.frame),
-    team: isTeam(row.team) ? row.team : EVENT_TAG_DEFAULTS.team,
+    team: normaliseTeam(row.team) ?? EVENT_TAG_DEFAULTS.team,
     ball_xy: isBallXY(row.ball_xy) && row.ball_xy ? [Number(row.ball_xy[0]), Number(row.ball_xy[1])] : null,
     sure: isSure(row.sure) ? Number(row.sure) : EVENT_TAG_DEFAULTS.sure,
     body: isBody(row.body) ? row.body : EVENT_TAG_DEFAULTS.body,
@@ -102,7 +102,7 @@ export function sanitiseEvent(e) {
     // the file keeps, so storing anything finer just loses it on reload and
     // makes a save look like it changed something.
     timestamp: toSeconds(toFrame(t)),
-    team: isTeam(e.team) ? e.team : EVENT_TAG_DEFAULTS.team,
+    team: normaliseTeam(e.team) ?? EVENT_TAG_DEFAULTS.team,
     ball_xy: isBallXY(e.ball_xy) && e.ball_xy ? [Number(e.ball_xy[0]), Number(e.ball_xy[1])] : null,
     sure: isSure(e.sure) ? Number(e.sure) : EVENT_TAG_DEFAULTS.sure,
     body: isBody(e.body) ? e.body : EVENT_TAG_DEFAULTS.body,
@@ -162,7 +162,7 @@ function rowFor(e) {
   const row = {
     frame: toFrame(e.timestamp),
     action: e.type,
-    team: isTeam(e.team) ? e.team : EVENT_TAG_DEFAULTS.team,
+    team: normaliseTeam(e.team) ?? EVENT_TAG_DEFAULTS.team,
     ball_xy: e.ball_xy && isBallXY(e.ball_xy) ? [Number(e.ball_xy[0]), Number(e.ball_xy[1])] : null,
     sure: isSure(e.sure) ? Number(e.sure) : EVENT_TAG_DEFAULTS.sure,
     body: isBody(e.body) ? e.body : EVENT_TAG_DEFAULTS.body,

@@ -54,8 +54,27 @@ export const LABEL_DEFINITIONS = {
  * team in possession, and not inferred from the direction of play.
  * `unknown` is a real answer when the shirt genuinely cannot be seen; the
  * guide asks that it stay under 30% of a match's events.
+ *
+ * The two sides are "Team A" and "Team B" rather than the guide's home/away:
+ * this corpus has no reliable home side, and naming them neutrally stops the
+ * tag being guessed from which end a team attacks. Anything reading these
+ * files needs to expect these values.
  */
-export const TEAMS = ['home', 'away', 'unknown'];
+export const TEAM_A = 'Team A';
+export const TEAM_B = 'Team B';
+export const TEAMS = [TEAM_A, TEAM_B, 'unknown'];
+
+/**
+ * Files written before the rename, and anything produced straight from the
+ * labelling guide, say home/away. Accept both on the way in so no existing
+ * ground truth has to be rewritten by hand.
+ */
+const TEAM_ALIASES = { home: TEAM_A, away: TEAM_B, team_a: TEAM_A, team_b: TEAM_B };
+export const normaliseTeam = (v) => {
+  if (TEAMS.includes(v)) return v;
+  const k = String(v ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return TEAM_ALIASES[k] ?? null;
+};
 
 /**
  * Three anchored levels, never a free value: free confidences are not
@@ -74,7 +93,7 @@ export const BODY_PARTS = ['foot', 'head', 'hand', 'other'];
 /** Which goal mouth is in the picture at that frame — not where play is going. */
 export const GOAL_VIEWS = ['left', 'right', 'none'];
 
-export const isTeam = (v) => TEAMS.includes(v);
+export const isTeam = (v) => normaliseTeam(v) !== null;
 export const isBody = (v) => BODY_PARTS.includes(v);
 export const isGoalView = (v) => GOAL_VIEWS.includes(v);
 export const isSure = (v) => SURE_LEVELS.includes(Number(v));

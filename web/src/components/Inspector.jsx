@@ -4,7 +4,7 @@ import { Trash2, Crosshair, Minus, Plus, Tags, ChevronDown, Target, XCircle } fr
 import { useStore } from '../store/useStore';
 import {
   EVENT_LABELS, LABEL_META, LABEL_GROUPS, labelTitle,
-  TEAMS, TEAM_META, SURE_LEVELS, BODY_PARTS, GOAL_VIEWS,
+  TEAMS, TEAM_META, TEAM_A, TEAM_B, SURE_LEVELS, BODY_PARTS, GOAL_VIEWS,
 } from '../lib/labels';
 import { seconds2 } from '../lib/format';
 import { toFrame, frameStep, DEFAULT_FPS } from '../lib/fps';
@@ -192,17 +192,25 @@ export default function Inspector() {
         {/* Which shirt is which, so the tag can be read off a single frame. */}
         {kit && (
           <div className="-mt-1 flex items-center gap-3 rounded-lg border border-white/[0.06] px-2.5 py-1.5">
-            {['home', 'away'].map((side) => (
-              <span key={side} className="flex min-w-0 items-center gap-1.5 text-2xs text-ink-400">
-                <span
-                  className="h-3 w-3 shrink-0 rounded-sm border border-white/25"
-                  style={{ background: kit[side]?.shirt || 'transparent' }}
-                  title={kit[side]?.shirt ?? 'shirt colour not given'}
-                />
-                <span className="truncate">{kit[side]?.name ?? side}</span>
-                {kit[side]?.shirt && <span className="text-ink-600">{kit[side].shirt}</span>}
-              </span>
-            ))}
+            {/* kits.json keeps the spec's home/away keys; Team A is the first
+                side listed, Team B the second. */}
+            {[TEAM_A, TEAM_B].map((team) => {
+              const side = TEAM_META[team].kitKey;
+              return (
+                <span key={team} className="flex min-w-0 items-center gap-1.5 text-2xs text-ink-400">
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-sm border border-white/25"
+                    style={{ background: kit[side]?.shirt || 'transparent' }}
+                    title={kit[side]?.shirt ?? 'shirt colour not given'}
+                  />
+                  <span className="truncate">
+                    <b className="text-ink-300">{TEAM_META[team].label}</b>
+                    {kit[side]?.name ? ` · ${kit[side].name}` : ''}
+                  </span>
+                  {kit[side]?.shirt && <span className="text-ink-600">{kit[side].shirt}</span>}
+                </span>
+              );
+            })}
             {kit.kits_similar && (
               <span className="ml-auto shrink-0 text-2xs text-amber-400" title="The two shirts are close in brightness">
                 similar kits

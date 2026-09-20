@@ -109,7 +109,7 @@ export default function EventsGuide() {
             <li>• A <b>pass</b> and the <b>pass received</b> after it are the same team.</li>
             <li>• A <b>pass</b> and the <b>interception</b> that cuts it out are different teams.</li>
             <li>• A <b>take on</b> and the <b>tackle</b> of the same duel are different teams.</li>
-            <li>• An <b>aerial duel</b> is two events on one frame — one home, one away.</li>
+            <li>• An <b>aerial duel</b> is two events on one frame — one Team A, one Team B.</li>
             <li>• <b>Ball out of play</b> is tagged with the team that does <em>not</em> take the restart.</li>
             <li>• Across a clip, neither team should carry more than 70% of any one action — that
               usually means the tag was filled from habit rather than read off the shirt.</li>
