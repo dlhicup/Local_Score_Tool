@@ -41,3 +41,59 @@ export const LABEL_DEFINITIONS = {
   foul: 'An infringement penalised by the referee.',
   goal: 'The ball fully crosses the goal line between the posts.',
 };
+
+// ---------------------------------------------------------------------------
+// Per-event tags, from Upgraded_guide.md (2026-09-18).
+//
+// Every event carries all five. They are cheap because the annotator is
+// already on the event's frame looking at the player who defines it.
+// ---------------------------------------------------------------------------
+
+/**
+ * The team of the player whose contact defines the event's frame — NOT the
+ * team in possession, and not inferred from the direction of play.
+ * `unknown` is a real answer when the shirt genuinely cannot be seen; the
+ * guide asks that it stay under 30% of a match's events.
+ */
+export const TEAMS = ['home', 'away', 'unknown'];
+
+/**
+ * Three anchored levels, never a free value: free confidences are not
+ * comparable between annotators.
+ *   1.0  class and frame both clear
+ *   0.7  it happened, but the class is a judgement call, or the frame is
+ *        uncertain by more than 3 frames
+ *   0.3  probably happened, would not bet on it
+ * Doubt about whether an event happened at all means: do not label it.
+ */
+export const SURE_LEVELS = [1.0, 0.7, 0.3];
+
+/** The body part making the contact that defines the frame. */
+export const BODY_PARTS = ['foot', 'head', 'hand', 'other'];
+
+/** Which goal mouth is in the picture at that frame — not where play is going. */
+export const GOAL_VIEWS = ['left', 'right', 'none'];
+
+export const isTeam = (v) => TEAMS.includes(v);
+export const isBody = (v) => BODY_PARTS.includes(v);
+export const isGoalView = (v) => GOAL_VIEWS.includes(v);
+export const isSure = (v) => SURE_LEVELS.includes(Number(v));
+
+/**
+ * A ball click: the centre of the ball in the video's native pixels, or null
+ * when the ball is hidden or out of frame at that instant — which is a valid
+ * answer, not a skipped field.
+ */
+export const isBallXY = (v) =>
+  v === null ||
+  (Array.isArray(v) && v.length === 2 && v.every((n) => Number.isFinite(Number(n)) && Number(n) >= 0));
+
+/** Defaults for a freshly marked event. Only `body` and `goal_view` are
+ *  guesses at the common case; everything else is explicitly "not yet known". */
+export const EVENT_TAG_DEFAULTS = {
+  team: 'unknown',
+  ball_xy: null,
+  sure: 1.0,
+  body: 'foot',
+  goal_view: 'none',
+};

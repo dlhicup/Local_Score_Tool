@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, getToken, setToken, setUnauthorizedHandler } from '../lib/api';
-import { EVENT_LABELS, LABEL_META } from '../lib/labels';
+import { EVENT_LABELS, LABEL_META, EVENT_TAG_DEFAULTS } from '../lib/labels';
 import { saveVideo, loadVideo } from '../lib/db';
 
 const SETTINGS_KEY = 'scoregt.settings';
@@ -136,7 +136,7 @@ export const useStore = create((set, get) => ({
       // and survives a different browser. Fall back to the IndexedDB copy for
       // videos that were dragged in by hand.
       const filename = project.video?.filename;
-      if (filename) get().useServerVideo(filename);
+      if (filename) { get().useServerVideo(filename); get().loadKit(filename); }
       return project;
     } catch (err) {
       set({ loadingProject: false });
@@ -199,6 +199,23 @@ export const useStore = create((set, get) => ({
   videoFile: null,
   videoUrl: null,
   videoMeta: null,
+
+  /**
+   * The kit for this clip, when kits.json names one. The team tag is only
+   * resolvable if the annotator can tell which shirt is home, so the colours
+   * sit beside the Home/Away buttons rather than in a separate page.
+   */
+  kit: null,
+  loadKit: async (filename) => {
+    if (!filename) return set({ kit: null });
+    try {
+      const { kit } = await api.kitFor(filename);
+      // Ignore a late answer for a clip the annotator has already left.
+      if (get().project?.video?.filename === filename) set({ kit });
+    } catch {
+      set({ kit: null });
+    }
+  },
 
   videoLoading: false,
   videoProgress: 0,
@@ -323,6 +340,7 @@ export const useStore = create((set, get) => ({
       selectedId: null,
     });
     get().useServerVideo(name);
+    get().loadKit(name);
     return project;
   },
 
@@ -420,24 +438,53 @@ export const useStore = create((set, get) => ({
     }),
 
   addEvent: (type, timestamp, extra = {}) => {
+    // Every event carries the five tags from the labelling guide. team starts
+    // at 'unknown' on purpose rather than inheriting the last one: a tag
+    // carried over from habit is exactly what the guide's consistency checks
+    // exist to catch, and an honest 'unknown' is a valid answer.
     const ev = {
       id: uid(),
       type,
       timestamp: Number(Number(timestamp).toFixed(3)),
-      endTimestamp: null,
-      team: null,
-      player: null,
-      confidence: 1,
-      source: 'human',
-      status: 'accepted',
-      description: '',
-      agreement: 1,
+      ...EVENT_TAG_DEFAULTS,
       ...extra,
     };
     get().commit([...get().events, ev], { label: `add ${type}` });
     set({ selectedId: ev.id });
     return ev;
   },
+
+  /**
+   * Set one tag on an event. Falls back to the event nearest the playhead when
+   * nothing is selected, so a tag key right after marking an action lands on
+   * the action just marked without reaching for the mouse.
+   */
+  setTag: (patch, id = null) => {
+    const { events, selectedId, currentTime } = get();
+    let target = id ?? selectedId;
+    if (!target) {
+      let best = null;
+      let bestGap = Infinity;
+      for (const e of events) {
+        const gap = Math.abs(e.timestamp - currentTime);
+        if (gap < bestGap) { bestGap = gap; best = e; }
+      }
+      // Only if it is genuinely near: a tag key with the playhead nowhere near
+      // an action should do nothing rather than tag something off-screen.
+      if (best && bestGap <= 2) target = best.id;
+    }
+    if (!target) return null;
+    get().updateEvent(target, patch);
+    set({ selectedId: target });
+    return target;
+  },
+
+  /**
+   * While armed, the next click on the picture records the ball's centre for
+   * the selected event instead of toggling playback.
+   */
+  ballPick: false,
+  setBallPick: (v) => set({ ballPick: Boolean(v) }),
 
   updateEvent: (id, patch) =>
     get().commit(

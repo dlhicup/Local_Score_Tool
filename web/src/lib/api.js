@@ -67,6 +67,8 @@ export const api = {
   assignments: () => request('/assignments'),
   assign: (clips, username) => request('/assignments', { method: 'PUT', body: { clips, username } }),
   labels: () => request('/labels'),
+  kits: () => request('/kits'),
+  kitFor: (name) => request(`/kits/${encodeURIComponent(name)}`),
 
   listProjects: () => request('/projects'),
   createProject: (payload) => request('/projects', { method: 'POST', body: payload }),

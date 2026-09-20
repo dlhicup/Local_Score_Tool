@@ -3,9 +3,9 @@ import fs from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listProjects, readProject, writeProject, emptyProject, idForVideo, deleteProject } from '../services/store.js';
+import { listProjects, projectForClip, idForVideo, deleteProject, VIDEO_DIR, VIDEO_RE } from '../services/store.js';
 import { getAssignments, assignClips } from '../services/users.js';
-import { removeGroundTruth, eventsFromGroundTruth } from '../services/gtfile.js';
+import { removeGroundTruth } from '../services/gtfile.js';
 import { ensureProxy, proxyState, removeProxy } from '../services/proxy.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -23,12 +23,10 @@ async function visibleTo(user) {
 const router = Router();
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const VIDEO_DIR = path.resolve(ROOT, process.env.VIDEO_DIR || 'video');
 // Lightweight 720p proxies for annotating. Encoded out of band; when a clip's
 // proxy exists it is served instead of the original — ~3x less to download,
 // with identical duration and frame timing. Originals are never modified.
 const PROXY_DIR = path.resolve(ROOT, process.env.PROXY_DIR || 'video-proxy');
-const VIDEO_RE = /\.(mp4|webm|mov|mkv|m4v)$/i;
 
 /** Never let a request escape the video directory. */
 function resolveVideo(name) {
@@ -318,25 +316,17 @@ router.post('/videos/:name/open', requireAuth, async (req, res, next) => {
     const id = idForVideo(name);
 
     // Same clip -> same id, so this is idempotent even under concurrent opens.
-    const existing = await readProject(id).catch(() => null);
-    if (existing) return res.json({ project: existing, created: false });
-
-    // Same recovery as resolveProject: a deliverable without a record is
-    // annotations that exist on disk but would otherwise open empty.
-    const recovered = await eventsFromGroundTruth(name);
-    if (recovered.length) console.log(`recovered ${recovered.length} actions for ${name} from its ground-truth file`);
-    const project = {
-      ...emptyProject({ name, video: { filename: name, size: stat.size, ...(req.body?.video ?? {}) } }),
-      id,
-      events: recovered,
-    };
-    await writeProject(project);
-    res.status(201).json({ project, created: true });
+    // One file per clip, and it is the whole record, so opening a clip is
+    // simply reading it. A clip with no file yet reads as empty; the file is
+    // written when something is saved, not merely because it was opened.
+    const project = await projectForClip(name);
+    res.json({ project, created: project.events.length === 0 });
   } catch (err) {
     if (err.code === 'ENOENT') return res.status(404).json({ error: 'Video not found' });
     next(err);
   }
 });
 
+// Re-exported so callers that already import it from here keep working.
 export { VIDEO_DIR };
 export default router;

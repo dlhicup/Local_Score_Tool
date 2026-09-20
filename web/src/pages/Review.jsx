@@ -12,7 +12,7 @@ import ActionMenu from '../components/ActionMenu';
 import ConfirmDelete from '../components/ConfirmDelete';
 import { useStore } from '../store/useStore';
 import { useHotkeys } from '../lib/useHotkeys';
-import { labelTitle } from '../lib/labels';
+import { labelTitle, TEAMS, TEAM_META, SURE_LEVELS, BODY_PARTS, GOAL_VIEWS } from '../lib/labels';
 import { frameStep, DEFAULT_FPS, REPORTING_FPS } from '../lib/fps';
 import { getVideoEl } from '../lib/videoRef';
 
@@ -40,7 +40,7 @@ export default function Review() {
   const {
     project, openProject, events, videoUrl, attachVideo, currentTime, seek,
     selectedId, selectedIds, select, clearSelection, addEvent, deleteEvent, deleteSelection, nudge, undo, redo,
-    saveProject, dirty, setPlaying, playing, setPlaybackRate, toast,
+    saveProject, dirty, setPlaying, playing, setPlaybackRate, toast, setTag, ballPick, setBallPick,
     past, future, loadingProject, settings, keyMap, setHeaderDelete,
     deleteCurrentProject,
   } = useStore();
@@ -173,6 +173,10 @@ export default function Review() {
           }
           return;
         case 'Escape':
+          if (ballPick) {
+            e.preventDefault();
+            return setBallPick(false);
+          }
           if (selectedIds.length) {
             e.preventDefault();
             return clearSelection();
@@ -199,9 +203,46 @@ export default function Review() {
         e.preventDefault();
         addEvent(label, currentTime);
         toast(`${labelTitle(label)} at ${currentTime.toFixed(2)}s`, 'success');
+        return;
+      }
+
+      // ---- tag keys, from the labelling guide ----------------------------
+      // Checked after the label keys so that rebinding a label onto one of
+      // these still works; the defaults do not collide.
+      const k = e.key.toLowerCase();
+
+      const team = TEAMS.find((t) => TEAM_META[t].key === k);
+      if (team) {
+        e.preventDefault();
+        return setTag({ team });
+      }
+
+      const sure = SURE_LEVELS.find((l) => l.key === e.key);
+      if (sure) {
+        e.preventDefault();
+        return setTag({ sure: sure.value });
+      }
+
+      if (k === 'b') {
+        e.preventDefault();
+        // Shift+B is the other valid answer: the ball is not visible here.
+        if (e.shiftKey) { setBallPick(false); return setTag({ ball_xy: null }); }
+        if (!selectedId) return toast('Select an action first, then click the ball', 'info');
+        return setBallPick(!ballPick);
+      }
+
+      // Cycle the two smallest tags rather than spend four more keys on them.
+      if (k === 'v' || k === 'n') {
+        e.preventDefault();
+        const ev = events.find((x) => x.id === selectedId);
+        if (!ev) return;
+        const list = k === 'v' ? BODY_PARTS : GOAL_VIEWS;
+        const field = k === 'v' ? 'body' : 'goal_view';
+        const next = list[(list.indexOf(ev[field]) + 1) % list.length];
+        return setTag({ [field]: next }, ev.id);
       }
     },
-    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, stepFrame, dirty, saveProject],
+    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, stepFrame, dirty, saveProject, setTag, ballPick, setBallPick],
   );
 
   // Saving already writes groundtruth/<clip>.json, so the only header action

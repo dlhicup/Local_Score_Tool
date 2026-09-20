@@ -155,8 +155,18 @@ Open a clip from the Library, then mark each action at the frame it happens.
 Press the action's key at the playhead, or right-click the timeline to pick
 from a list.
 
+Then **tag it**, while you are still on its frame — five fields, a few seconds
+each, all of them on every action. See [The ground-truth files](#the-ground-truth-files)
+for what each one means, and the **Events guide** page in the app for how to
+judge them.
+
 **Save** writes the ground truth and stays on the clip. Pick the next clip
 from the Library when you're done.
+
+The badge beside the action count in the header watches two things for you: the
+share of actions still tagged `unknown` (the spec asks for under 30%), and the
+consistency rules — a reception that changed team, an interception that didn't,
+an aerial duel whose two halves agree. Click a warning to jump to it.
 
 ### Keyboard
 
@@ -174,6 +184,19 @@ from the Library when you're done.
 | `⌘/Ctrl` + `Z` | undo (`⇧` to redo) |
 | `⌘/Ctrl` + `S` | save |
 | `?` | show all shortcuts |
+
+### Tagging the action
+
+| key | sets |
+| --- | --- |
+| `z` `x` `c` | team: home · away · unknown |
+| `b` | click the centre of the ball · `⇧B` marks it not visible |
+| `6` `7` `8` | sure: 1.0 · 0.7 · 0.3 |
+| `v` | body: foot → head → hand → other |
+| `n` | goal in view: left → right → none |
+
+A tag key applies to the selected action, or to the nearest one within two
+seconds of the playhead — so tagging straight after marking needs no mouse.
 
 ### The 15 event keys
 
@@ -258,26 +281,84 @@ ffmpeg"* in the Library and still show black. Everything else plays normally.
 
 ## The ground-truth files
 
-Saving writes two things:
+**One file per clip, and it is the only store.** `groundtruth/<clip name>.json`
+is what the app reads, what it writes, and what gets handed off — there is no
+second copy to drift out of step with it. Drop a ground-truth file in beside a
+clip of the same name and the workspace opens with it loaded.
 
-- `data/gt_<hash>.json` — the working record (timestamps, status, notes)
-- `groundtruth/<clip name>.json` — **the deliverable**
+Frame numbers are on a **fixed 25 fps reporting clock** — `frame = seconds × 25`
+— regardless of the video's own frame rate. A 30-second clip is 750 frames even
+if it was shot at 30 fps. That clock is the file's only precision, so a time
+read back is on the 1/25 s grid.
 
-The deliverable holds nothing but frames and actions:
+Every action carries the five tags:
 
 ```json
 {"groundtruth":[
-  {"frame":18,"action":"pass"},
-  {"frame":18,"action":"aerial_duel"},
-  {"frame":92,"action":"pass_received"},
-  {"frame":141,"action":"pass"}
+  {"frame":283,"action":"pass","team":"home","ball_xy":[1210,402],"sure":1,"body":"foot","goal_view":"left"},
+  {"frame":312,"action":"aerial_duel","team":"home","ball_xy":null,"sure":0.7,"body":"head","goal_view":"none"},
+  {"frame":312,"action":"aerial_duel","team":"away","ball_xy":null,"sure":0.7,"body":"head","goal_view":"none"}
 ]}
 ```
 
-Rows are ordered by frame; events on the same frame keep the order they were
-added. Frame numbers are on a **fixed 25 fps reporting clock** — `frame =
-seconds × 25` — regardless of the video's own frame rate. A 30-second clip is
-750 frames even if it was shot at 30 fps.
+| field | values | what it is |
+| --- | --- | --- |
+| `team` | `home` `away` `unknown` | the team of the player whose contact defines the frame — read off the shirt, never inferred from the direction of play |
+| `ball_xy` | `[x, y]` or `null` | the centre of the ball at that frame in the video's own pixels; `null` means not visible, which is an answer, not a gap |
+| `sure` | `1.0` `0.7` `0.3` | doubt about the **class or the timing**. Doubt about whether it happened at all means don't label it |
+| `body` | `foot` `head` `hand` `other` | the body part making the contact |
+| `goal_view` | `left` `right` `none` | which goal mouth is in the picture at that frame |
+
+A `goal` that was an own goal also carries `"own_goal": true`; the team stays
+the credited (attacking) side.
+
+Rows are in frame order, with events on the same frame keeping the order they
+were added — which is how an `aerial_duel` pair stays together.
+
+**Reading older files.** A file with only `frame` and `action` loads fine; the
+tags take their defaults (`team: "unknown"`, `sure: 1.0`, `body: "foot"`,
+`goal_view: "none"`, `ball_xy: null`) and are written out in full the next time
+the clip is saved. A bad value in any tag is repaired to the default rather
+than dropping the action. Both `{"groundtruth": [...]}` and a bare array are
+accepted.
+
+**Per-clip bookkeeping** — review verdicts and edit timestamps — lives in
+`data/clips.json`, deliberately outside the deliverable so nothing downstream
+has to step over it. Losing it costs nothing that matters.
+
+## Kit colours (`kits.json`)
+
+The team tag is only resolvable if a reader can tell which shirt is home, so
+put a `kits.json` at the project root and the colours appear beside the
+Home/Away buttons while annotating. Copy `kits.example.json` to start.
+
+One match, exactly the shape from the labelling spec:
+
+```json
+{
+  "match": "2026-03-14_teamA_teamB",
+  "home": {"name": "Team A", "shirt": "red", "shorts": "white", "socks": "red"},
+  "away": {"name": "Team B", "shirt": "white", "shorts": "navy", "socks": "white"},
+  "goalkeepers": {"home": "green", "away": "black"},
+  "darker_kit": "home",
+  "kits_similar": false,
+  "periods": [{"period": 1, "start_s": 12.4, "end_s": 2831.0, "home_attacks": "left"}]
+}
+```
+
+Several clips from different matches — give each its own line, with an optional
+fallback:
+
+```json
+{
+  "clips": { "St. Louis City SC-1.mp4": { "home": {...}, "away": {...} } },
+  "default": { "home": {...}, "away": {...} }
+}
+```
+
+`darker_kit` has to be right: the model learns "darker kit" against "lighter
+kit" as an absolute. If the two shirts are close in brightness, set
+`"kits_similar": true` instead of guessing.
 
 ## Config (`.env`)
 
@@ -297,8 +378,8 @@ something, copy `.env.example` to `server/.env`.
 - `video/` — the shared clips (host-local, never in git)
 - `video-proxy/` — H.264 copies of only those clips a browser cannot decode
 - `exam/` — reference examples: `<name>.gt.json` + `<name>.mp4` pairs shown on the Reference page
-- `data/` — working records and the user list
-- `groundtruth/` — the deliverable `<clip name>.json` files
+- `data/` — the user list and per-clip review verdicts (`clips.json`)
+- `groundtruth/` — **the annotations**: one `<clip name>.json` per clip
 - `server/`, `web/` — the app
 
 Everything under `video/`, `video-proxy/`, `exam/`, `data/` and `groundtruth/`

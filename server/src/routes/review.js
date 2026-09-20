@@ -2,11 +2,10 @@ import { Router } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listProjects, readProject, writeProject, idForVideo } from '../services/store.js';
+import { listProjects, readProject, writeProject, idForVideo, VIDEO_DIR } from '../services/store.js';
 import { getAssignments } from '../services/users.js';
 import { isValidLabel } from '../labels.js';
 import { requireAdmin } from '../middleware/auth.js';
-import { VIDEO_DIR } from './videos.js';
 
 /**
  * Reviewer workflow: a reviewer judges each labeled clip — approve, or flag

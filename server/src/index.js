@@ -14,8 +14,7 @@ import projectRoutes from './routes/projects.js';
 import videoRoutes from './routes/videos.js';
 import examRoutes from './routes/exam.js';
 import reviewRoutes from './routes/review.js';
-import { DATA_DIR } from './services/store.js';
-import { VIDEO_DIR } from './routes/videos.js';
+import { DATA_DIR, VIDEO_DIR, migrateLegacyRecords } from './services/store.js';
 import { GT_DIR } from './services/gtfile.js';
 
 const app = express();
@@ -105,6 +104,9 @@ app.use((err, _req, res, _next) => {
 
 // A locked users.json must not stop the server booting: the store is re-read
 // on every request, so seeding can simply be retried on the next start.
+// Move anything still in the old two-file layout across before serving.
+await migrateLegacyRecords().catch((err) => console.error(`legacy migration failed: ${err.message}`));
+
 const seeded = await ensureSeedAdmin().catch((err) => {
   console.error(`Could not seed the first admin account: ${err.message}`);
   return null;
@@ -118,9 +120,9 @@ if (seeded) {
 
 app.listen(PORT, HOST, () => {
   console.log(`Score GT API  →  http://${HOST}:${PORT}`);
-  console.log(`Ground truth  →  ${DATA_DIR}`);
+  console.log(`Clip metadata →  ${DATA_DIR}`);
   console.log(`Video tasks   →  ${VIDEO_DIR}`);
-  console.log(`GT files      →  ${GT_DIR}`);
+  console.log(`Ground truth  →  ${GT_DIR}`);
 });
 
 if (existsSync(path.join(WEB_DIST, 'index.html'))) {

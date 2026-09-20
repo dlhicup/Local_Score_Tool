@@ -2,6 +2,7 @@ import { NavLink, useParams, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, CheckCircle2, GraduationCap } from 'lucide-react';
 import Logo from './Logo';
+import TagStatus from './TagStatus';
 import { useStore } from '../store/useStore';
 import { isManager } from '../lib/roles';
 
@@ -91,11 +92,12 @@ export default function AppShell({ children }) {
 
               <div className="flex-1" />
 
-              <div className="hidden items-center gap-4 text-xs md:flex">
+              <div className="hidden items-center gap-3 text-xs md:flex">
                 <span className="text-ink-400">
                   <span className="font-semibold text-ink-100 tabular">{events.length}</span>{' '}
                   {events.length === 1 ? 'action' : 'actions'}
                 </span>
+                <TagStatus />
               </div>
 
               <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/[0.03] p-0.5">

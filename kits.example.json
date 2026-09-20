@@ -1,0 +1,20 @@
+{
+  "clips": {
+    "St. Louis City SC-1.mp4": {
+      "match": "2026-09-17_stlouis",
+      "home": { "name": "St. Louis City SC", "shirt": "red", "shorts": "red", "socks": "red" },
+      "away": { "name": "Opponent", "shirt": "white", "shorts": "white", "socks": "white" },
+      "goalkeepers": { "home": "green", "away": "black" },
+      "referee": "yellow",
+      "darker_kit": "home",
+      "kits_similar": false,
+      "periods": [{ "period": 1, "start_s": 0, "end_s": 326.6, "home_attacks": "left" }]
+    }
+  },
+  "default": {
+    "home": { "name": "Home", "shirt": "dark" },
+    "away": { "name": "Away", "shirt": "light" },
+    "darker_kit": "home",
+    "kits_similar": false
+  }
+}
