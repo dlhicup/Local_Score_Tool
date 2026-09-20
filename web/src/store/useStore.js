@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, getToken, setToken, setUnauthorizedHandler } from '../lib/api';
-import { EVENT_LABELS, LABEL_META, EVENT_TAG_DEFAULTS } from '../lib/labels';
+import { EVENT_LABELS, LABEL_META, EVENT_TAG_DEFAULTS, missingBall } from '../lib/labels';
 import { saveVideo, loadVideo } from '../lib/db';
 
 const SETTINGS_KEY = 'scoregt.settings';
@@ -173,6 +173,28 @@ export const useStore = create((set, get) => ({
   saveProject: async ({ silent = false } = {}) => {
     const { project, events } = get();
     if (!project) return;
+
+    /**
+     * The ball question has to be answered on every action before a clip can
+     * be written: a position, or "not visible". It is the one tag with no safe
+     * default — null would quietly assert the ball was not there — so instead
+     * of guessing, the save stops and points at the first action still open.
+     */
+    const open = missingBall(events);
+    if (open.length) {
+      const first = open[0];
+      set({ selectedId: first.id, selectedIds: [] });
+      get().seek(first.timestamp);
+      get().toast(
+        `Not saved — ${open.length} action${open.length === 1 ? ' still needs' : 's still need'} a ball ` +
+          `position. Click the ball (b), or mark it not visible (⇧B). Jumped to the first.`,
+        'error',
+      );
+      const err = new Error('ball position missing');
+      err.missingBall = open.length;
+      throw err;
+    }
+
     try {
       const res = await api.saveProject(project.id, { ...project, events });
       const stored = res.project;

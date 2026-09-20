@@ -81,11 +81,17 @@ function eventFromRow(row) {
     type: row.action,
     timestamp: toSeconds(row.frame),
     team: normaliseTeam(row.team) ?? EVENT_TAG_DEFAULTS.team,
-    ball_xy: isBallXY(row.ball_xy) && row.ball_xy ? [Number(row.ball_xy[0]), Number(row.ball_xy[1])] : null,
     sure: isSure(row.sure) ? Number(row.sure) : EVENT_TAG_DEFAULTS.sure,
     body: isBody(row.body) ? row.body : EVENT_TAG_DEFAULTS.body,
     goal_view: isGoalView(row.goal_view) ? row.goal_view : EVENT_TAG_DEFAULTS.goal_view,
   };
+  // ball_xy has three states, and only two of them are answers. A coordinate
+  // pair is a position; null means the ball is not visible at this frame, which
+  // the guide counts as a real answer. The key being absent means nobody has
+  // looked yet — that is not an answer, and a save is refused until it is one.
+  if (row && 'ball_xy' in row) {
+    ev.ball_xy = isBallXY(row.ball_xy) && row.ball_xy ? [Number(row.ball_xy[0]), Number(row.ball_xy[1])] : null;
+  }
   // Only a goal can be an own goal; the tag is meaningless elsewhere.
   if (ev.type === 'goal' && row.own_goal === true) ev.own_goal = true;
   return ev;
@@ -104,11 +110,15 @@ export function sanitiseEvent(e) {
     // makes a save look like it changed something.
     timestamp: toSeconds(toFrame(t)),
     team: normaliseTeam(e.team) ?? EVENT_TAG_DEFAULTS.team,
-    ball_xy: isBallXY(e.ball_xy) && e.ball_xy ? [Number(e.ball_xy[0]), Number(e.ball_xy[1])] : null,
     sure: isSure(e.sure) ? Number(e.sure) : EVENT_TAG_DEFAULTS.sure,
     body: isBody(e.body) ? e.body : EVENT_TAG_DEFAULTS.body,
     goal_view: isGoalView(e.goal_view) ? e.goal_view : EVENT_TAG_DEFAULTS.goal_view,
   };
+  // Absent stays absent: an unanswered ball is not silently turned into
+  // "not visible" on its way through the server.
+  if (e && 'ball_xy' in e && e.ball_xy !== undefined) {
+    ev.ball_xy = isBallXY(e.ball_xy) && e.ball_xy ? [Number(e.ball_xy[0]), Number(e.ball_xy[1])] : null;
+  }
   if (ev.type === 'goal' && e.own_goal === true) ev.own_goal = true;
   return ev;
 }
@@ -164,14 +174,21 @@ function rowFor(e) {
     frame: toFrame(e.timestamp),
     action: e.type,
     team: normaliseTeam(e.team) ?? EVENT_TAG_DEFAULTS.team,
-    ball_xy: e.ball_xy && isBallXY(e.ball_xy) ? [Number(e.ball_xy[0]), Number(e.ball_xy[1])] : null,
-    sure: isSure(e.sure) ? Number(e.sure) : EVENT_TAG_DEFAULTS.sure,
-    body: isBody(e.body) ? e.body : EVENT_TAG_DEFAULTS.body,
-    goal_view: isGoalView(e.goal_view) ? e.goal_view : EVENT_TAG_DEFAULTS.goal_view,
   };
+  // Only written once answered. A save with an unanswered ball is refused
+  // before it gets here, so in a file on disk this key is always present.
+  if (e.ball_xy !== undefined) {
+    row.ball_xy = e.ball_xy && isBallXY(e.ball_xy) ? [Number(e.ball_xy[0]), Number(e.ball_xy[1])] : null;
+  }
+  row.sure = isSure(e.sure) ? Number(e.sure) : EVENT_TAG_DEFAULTS.sure;
+  row.body = isBody(e.body) ? e.body : EVENT_TAG_DEFAULTS.body;
+  row.goal_view = isGoalView(e.goal_view) ? e.goal_view : EVENT_TAG_DEFAULTS.goal_view;
   if (e.type === 'goal' && e.own_goal === true) row.own_goal = true;
   return row;
 }
+
+/** Whether the ball question has been answered for this event. */
+export const ballAnswered = (e) => e?.ball_xy !== undefined;
 
 /**
  * Write a clip's ground truth: one row per line, frame order, ties keeping the

@@ -191,15 +191,33 @@ value is the documented default:
 | field | default | meaning of the default |
 |---|---|---|
 | `team` | `"unknown"` | not yet read off the shirt |
-| `ball_xy` | `null` | not visible, or not yet clicked — these are not distinguished |
+| `ball_xy` | *(none — see below)* | |
 | `sure` | `1.0` | assumed clear until said otherwise |
 | `body` | `"foot"` | the common case |
 | `goal_view` | `"none"` | the common case |
 
-`ball_xy: null` therefore carries two meanings. The guide treats "not visible"
-as a real answer, and the tool cannot tell it apart from "not yet reached". The
-share of actions still tagged `unknown` is the honest progress signal, and the
-workspace shows it against the 30 % ceiling from A.3.
+**`ball_xy` has no default, and a clip cannot be saved until every action has
+one.** It is the only tag with no answer that is safe to assume: defaulting it
+to `null` would silently assert the ball was not visible, which is a claim, not
+an absence — and a position cannot be guessed at all. So the tag has three
+states in the workspace and only two of them are answers:
+
+| state | meaning |
+|---|---|
+| `[x, y]` | the ball's centre at that frame |
+| `null` | not visible or out of frame — a real answer, as A.6 intends |
+| key absent | nobody has looked yet — **not** an answer |
+
+Pressing Save with any action in the third state writes nothing, says how many
+are outstanding, and jumps to the first. A file on disk therefore always
+carries `ball_xy` on every row: the absent state exists only in the workspace,
+before a save.
+
+This is stricter than the guide, which budgets two seconds for the click and
+does not say what happens if it is skipped. The reasoning is the scorer's: a
+ball position that was never looked at is indistinguishable, downstream, from
+one that was looked at and found missing, and the second is a training signal
+while the first is a hole.
 
 `body` and `goal_view` defaulting to a plausible value is a deliberate trade:
 the guide budgets one second each, which only holds if the common case needs no

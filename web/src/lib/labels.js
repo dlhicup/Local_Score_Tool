@@ -109,14 +109,26 @@ export const SURE_LEVELS = [
 export const BODY_PARTS = ['foot', 'head', 'hand', 'other'];
 export const GOAL_VIEWS = ['left', 'right', 'none'];
 
-/** Defaults for a freshly marked event; the server applies the same ones. */
+/**
+ * Defaults for a freshly marked event; the server applies the same ones.
+ *
+ * `ball_xy` is deliberately absent: null would claim the ball was not visible,
+ * and a position cannot be guessed. It stays unanswered until somebody says
+ * otherwise, and Save is refused while any action is still in that state.
+ */
 export const EVENT_TAG_DEFAULTS = {
   team: 'unknown',
-  ball_xy: null,
   sure: 1.0,
   body: 'foot',
   goal_view: 'none',
 };
+
+/** Has the ball question been answered — a position, or "not visible"? */
+export const ballAnswered = (e) => e?.ball_xy !== undefined;
+
+/** Actions still waiting on a ball answer, earliest first. */
+export const missingBall = (events) =>
+  [...events].sort((a, b) => a.timestamp - b.timestamp).filter((e) => !ballAnswered(e));
 
 /**
  * The consistency checks from the guide (A.4), run over one clip's events.

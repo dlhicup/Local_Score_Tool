@@ -74,6 +74,9 @@ export default function EventsGuide() {
                 One click on the <b>centre of the ball</b> at that frame. <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">⇧B</kbd>{' '}
                 marks it not visible — also a real answer, not a skipped field. An occluded ball whose
                 position is obvious (under a foot, in the keeper's hands) still gets the click.
+                <b className="text-amber-400"> This one is required:</b> the clip will not save while any
+                action is still without a ball answer. Save tells you how many are left and jumps to the
+                first, and the badge by the action count keeps a running total.
               </dd>
             </div>
             <div>

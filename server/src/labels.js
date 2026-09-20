@@ -107,11 +107,18 @@ export const isBallXY = (v) =>
   v === null ||
   (Array.isArray(v) && v.length === 2 && v.every((n) => Number.isFinite(Number(n)) && Number(n) >= 0));
 
-/** Defaults for a freshly marked event. Only `body` and `goal_view` are
- *  guesses at the common case; everything else is explicitly "not yet known". */
+/**
+ * Defaults for a freshly marked event.
+ *
+ * `ball_xy` is deliberately absent. Every other tag has a starting value that
+ * is either honest ("unknown") or the common case, but the ball has no answer
+ * that is safe to assume: defaulting it to null would silently claim the ball
+ * was not visible, and a position cannot be guessed at all. It stays
+ * unanswered until somebody says otherwise, and a save is refused while any
+ * action is still in that state.
+ */
 export const EVENT_TAG_DEFAULTS = {
   team: 'unknown',
-  ball_xy: null,
   sure: 1.0,
   body: 'foot',
   goal_view: 'none',

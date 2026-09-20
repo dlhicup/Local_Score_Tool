@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2, Crosshair, Minus, Plus, Tags, ChevronDown, Target, XCircle } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import {
-  EVENT_LABELS, LABEL_META, LABEL_GROUPS, labelTitle,
+  EVENT_LABELS, LABEL_META, LABEL_GROUPS, labelTitle, ballAnswered,
   TEAMS, TEAM_META, TEAM_A, TEAM_B, SURE_LEVELS, BODY_PARTS, GOAL_VIEWS,
 } from '../lib/labels';
 import { seconds2 } from '../lib/format';
@@ -220,8 +220,13 @@ export default function Inspector() {
 
         {/* Ball position: one click on the centre of the ball. */}
         <div>
-          <p className="mb-1 text-2xs font-semibold uppercase tracking-wider text-ink-600">
+          <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-600">
             Ball at this frame
+            {!ballAnswered(ev) && (
+              <span className="rounded bg-amber-500/15 px-1.5 py-px text-2xs font-semibold text-amber-400">
+                needed
+              </span>
+            )}
           </p>
           <div className="flex gap-1">
             <button

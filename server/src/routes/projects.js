@@ -3,7 +3,7 @@ import {
   listProjects, readProject, writeProject, deleteProject, projectForClip, clipForId,
 } from '../services/store.js';
 import { summarise } from '../services/merge.js';
-import { sanitiseEvent, groundTruthExists, toFrame, REPORTING_FPS } from '../services/gtfile.js';
+import { sanitiseEvent, ballAnswered, groundTruthExists, toFrame, REPORTING_FPS } from '../services/gtfile.js';
 import { getAssignments } from '../services/users.js';
 import { requireAuth } from '../middleware/auth.js';
 import { EVENT_LABELS } from '../labels.js';
@@ -63,6 +63,21 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
     const events = Array.isArray(incoming.events)
       ? incoming.events.map(sanitiseEvent).filter(Boolean).sort((a, b) => a.timestamp - b.timestamp)
       : existing.events;
+
+    // The ball is the one tag with no safe default, so a file is never written
+    // with the question left open: either a position, or "not visible". The
+    // client checks first and says which action is missing; this is the backstop
+    // for anything reaching the API directly.
+    const unanswered = events.filter((e) => !ballAnswered(e));
+    if (unanswered.length) {
+      return res.status(422).json({
+        error:
+          `${unanswered.length} action${unanswered.length === 1 ? ' still needs' : 's still need'} ` +
+          'a ball position, or marking as not visible',
+        missingBall: unanswered.length,
+        firstAt: unanswered[0].timestamp,
+      });
+    }
 
     const project = {
       ...existing,

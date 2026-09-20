@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Check, ChevronDown } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { teamChecks, unknownShare } from '../lib/labels';
+import { teamChecks, unknownShare, missingBall } from '../lib/labels';
 import { seconds2 } from '../lib/format';
 
 /**
@@ -22,15 +22,16 @@ export default function TagStatus() {
   const select = useStore((s) => s.select);
   const [open, setOpen] = useState(false);
 
-  const { share, checks } = useMemo(
-    () => ({ share: unknownShare(events), checks: teamChecks(events) }),
+  const { share, checks, noBall } = useMemo(
+    () => ({ share: unknownShare(events), checks: teamChecks(events), noBall: missingBall(events) }),
     [events],
   );
 
   if (!events.length) return null;
 
   const overUnknown = share > 0.3;
-  const clean = !overUnknown && checks.length === 0;
+  // The ball is the one tag that blocks a save, so it leads the badge.
+  const clean = !overUnknown && checks.length === 0 && noBall.length === 0;
 
   return (
     <div className="relative">
@@ -44,6 +45,7 @@ export default function TagStatus() {
         }`}
       >
         {clean ? <Check size={13} /> : <AlertTriangle size={13} />}
+        {noBall.length > 0 && <span className="tabular">{noBall.length} no ball ·</span>}
         <span className="tabular">{Math.round(share * 100)}% unknown</span>
         {checks.length > 0 && <span className="tabular">· {checks.length}</span>}
         <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -57,6 +59,19 @@ export default function TagStatus() {
             exit={{ opacity: 0, y: -4 }}
             className="absolute right-0 top-full z-50 mt-2 w-[22rem] overflow-hidden rounded-xl border border-white/10 bg-ink-800 shadow-lift"
           >
+            {noBall.length > 0 && (
+              <button
+                onClick={() => { seek(noBall[0].timestamp); select(noBall[0].id); setOpen(false); }}
+                className="flex w-full items-start gap-2 border-b border-white/[0.06] px-3 py-2 text-left transition hover:bg-white/[0.04]"
+              >
+                <span className="mt-0.5 font-mono text-2xs tabular text-amber-400">{noBall.length}</span>
+                <span className="flex-1 text-2xs leading-snug text-amber-400">
+                  action{noBall.length === 1 ? '' : 's'} with no ball answer — the clip cannot be saved until each has
+                  a position or is marked not visible. Click to jump to the first.
+                </span>
+              </button>
+            )}
+
             <div className="border-b border-white/[0.06] px-3 py-2">
               <p className={`text-xs font-medium ${overUnknown ? 'text-amber-400' : 'text-ink-300'}`}>
                 {Math.round(share * 100)}% of actions have an unknown team

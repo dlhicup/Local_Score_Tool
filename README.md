@@ -304,7 +304,7 @@ Every action carries the five tags:
 | field | values | what it is |
 | --- | --- | --- |
 | `team` | `Team A` `Team B` `unknown` | the team of the player whose contact defines the frame — read off the shirt, never inferred from the direction of play |
-| `ball_xy` | `[x, y]` or `null` | the centre of the ball at that frame in the video's own pixels; `null` means not visible, which is an answer, not a gap |
+| `ball_xy` | `[x, y]` or `null` | the centre of the ball at that frame in the video's own pixels; `null` means not visible, which is an answer, not a gap. **Required — see below** |
 | `sure` | `1.0` `0.7` `0.3` | doubt about the **class or the timing**. Doubt about whether it happened at all means don't label it |
 | `body` | `foot` `head` `hand` `other` | the body part making the contact |
 | `goal_view` | `left` `right` `none` | which goal mouth is in the picture at that frame |
@@ -324,12 +324,29 @@ the credited (attacking) side.
 Rows are in frame order, with events on the same frame keeping the order they
 were added — which is how an `aerial_duel` pair stays together.
 
+**The ball is required — a clip will not save without it.** Every other tag has
+a starting value; `ball_xy` has none, because there is no answer that is safe
+to assume. `null` would silently claim the ball was not visible, and a position
+cannot be guessed. So it has three states, and only two are answers:
+
+| in the workspace | means |
+| --- | --- |
+| `[x, y]` | the ball's centre at that frame — click it, or press `b` |
+| `null` | not visible or out of frame — press `⇧B`. A real answer |
+| not set | nobody has looked yet. **Not** an answer |
+
+Pressing Save while any action is in the third state **writes nothing**, tells
+you how many are outstanding and jumps to the first. The header badge shows the
+running count, so you can see it coming. A file on disk therefore always has
+`ball_xy` on every row.
+
 **Reading older files.** A file with only `frame` and `action` loads fine; the
-tags take their defaults (`team: "unknown"`, `sure: 1.0`, `body: "foot"`,
-`goal_view: "none"`, `ball_xy: null`) and are written out in full the next time
-the clip is saved. A bad value in any tag is repaired to the default rather
-than dropping the action. Both `{"groundtruth": [...]}` and a bare array are
-accepted.
+other tags take their defaults (`team: "unknown"`, `sure: 1.0`, `body: "foot"`,
+`goal_view: "none"`) and are written out in full on the next save. `ball_xy`
+does not default — an older file's actions all count as unanswered, so expect
+to work through them before that clip can be saved again. A bad value in any
+tag is repaired rather than dropping the action. Both `{"groundtruth": [...]}`
+and a bare array are accepted.
 
 **Everything about a clip is in that one file.** Alongside `groundtruth` it may
 carry two more keys, both optional:
