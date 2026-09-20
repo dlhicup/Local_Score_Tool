@@ -312,13 +312,14 @@ Every action carries the five tags:
 A `goal` that was an own goal also carries `"own_goal": true`; the team stays
 the credited (attacking) side.
 
-> **Note on `team`.** The labelling spec writes these two values as `home` and
-> `away`. This tool stores **`Team A`** and **`Team B`** instead, because the
-> corpus has no reliable home side and a neutral name stops the tag being
-> guessed from which end a team attacks. Anything consuming these files needs
-> to expect those strings. Reading is tolerant in both directions — `home`,
-> `away`, `team_a` and `team_b` are all accepted on the way in and rewritten to
-> the canonical pair on the next save — so older files load unchanged.
+> **Note on `team`.** These two values were originally specified as `home` and
+> `away`. They are **`Team A`** and **`Team B`** here, because the corpus has no
+> reliable home side and a venue-based name invites the tag being guessed from
+> which end a team attacks. `Upgraded_guide.md` is amended to match, and
+> anything consuming these files needs to expect the new strings. Reading is
+> tolerant in both directions — `home`, `away`, `team_a` and `team_b` are all
+> accepted on the way in and rewritten to the canonical pair on the next save —
+> so files written to the original spec load unchanged.
 
 Rows are in frame order, with events on the same frame keeping the order they
 were added — which is how an `aerial_duel` pair stays together.
@@ -340,21 +341,21 @@ The team tag is only resolvable if a reader can tell the two sides apart, so
 put a `kits.json` at the project root and the colours appear beside the
 Team A / Team B buttons while annotating. Copy `kits.example.json` to start.
 
-The kit file keeps the labelling spec's `home`/`away` keys: **`home` is Team A
-and `away` is Team B.** Which is which does not matter to the model, only that
-the same shirt is always the same letter within a clip.
+Sides are keyed `team_a` / `team_b`, the same names the tag uses. Which side is
+which doesn't matter to the model — only that the same shirt is always the same
+letter within a clip.
 
-One match, exactly the shape from the labelling spec:
+One match, used for every clip:
 
 ```json
 {
   "match": "2026-03-14_teamA_teamB",
-  "home": {"name": "Team A", "shirt": "red", "shorts": "white", "socks": "red"},
-  "away": {"name": "Team B", "shirt": "white", "shorts": "navy", "socks": "white"},
-  "goalkeepers": {"home": "green", "away": "black"},
-  "darker_kit": "home",
+  "team_a": {"name": "Team A", "shirt": "red", "shorts": "white", "socks": "red"},
+  "team_b": {"name": "Team B", "shirt": "white", "shorts": "navy", "socks": "white"},
+  "goalkeepers": {"team_a": "green", "team_b": "black"},
+  "darker_kit": "team_a",
   "kits_similar": false,
-  "periods": [{"period": 1, "start_s": 12.4, "end_s": 2831.0, "home_attacks": "left"}]
+  "periods": [{"period": 1, "start_s": 12.4, "end_s": 2831.0, "team_a_attacks": "left"}]
 }
 ```
 
@@ -363,10 +364,14 @@ fallback:
 
 ```json
 {
-  "clips": { "St. Louis City SC-1.mp4": { "home": {...}, "away": {...} } },
-  "default": { "home": {...}, "away": {...} }
+  "clips": { "St. Louis City SC-1.mp4": { "team_a": {...}, "team_b": {...} } },
+  "default": { "team_a": {...}, "team_b": {...} }
 }
 ```
+
+A file written with the earlier `home` / `away` keys is normalised on read —
+`home` becomes `team_a`, `away` becomes `team_b`, and `home_attacks` becomes
+`team_a_attacks` — so nothing has to be rewritten by hand.
 
 `darker_kit` has to be right: the model learns "darker kit" against "lighter
 kit" as an absolute. If the two shirts are close in brightness, set

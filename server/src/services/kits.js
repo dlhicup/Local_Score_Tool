@@ -15,11 +15,46 @@ import { fileURLToPath } from 'node:url';
  * The guide allows one kit line per clip where the parent match is unknown,
  * which is what the `clips` map is for.
  *
+ * Sides are keyed `team_a` / `team_b`, the same names the event tag uses. A
+ * file written with the earlier `home` / `away` keys is normalised on read, so
+ * nothing has to be rewritten by hand.
+ *
  * Read-only here. It is authored once per match by whoever prepares the
  * footage, and an annotator guessing at it would defeat the point.
  */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const KITS = path.resolve(ROOT, process.env.KITS_FILE || 'kits.json');
+
+/**
+ * One kit line, with whichever spelling it was written in mapped to the
+ * canonical `team_a` / `team_b`. Unknown keys are passed through untouched,
+ * so a field this tool does not know about is never dropped.
+ */
+function normaliseKit(kit) {
+  if (!kit || typeof kit !== 'object') return kit ?? null;
+  const { home, away, goalkeepers, darker_kit: darker, periods, ...rest } = kit;
+  const side = (v) => (v === 'home' ? 'team_a' : v === 'away' ? 'team_b' : v);
+  const out = { ...rest };
+  if (home !== undefined && out.team_a === undefined) out.team_a = home;
+  if (away !== undefined && out.team_b === undefined) out.team_b = away;
+  if (goalkeepers && typeof goalkeepers === 'object') {
+    out.goalkeepers = {
+      ...goalkeepers,
+      ...(goalkeepers.home !== undefined && goalkeepers.team_a === undefined ? { team_a: goalkeepers.home } : {}),
+      ...(goalkeepers.away !== undefined && goalkeepers.team_b === undefined ? { team_b: goalkeepers.away } : {}),
+    };
+    delete out.goalkeepers.home;
+    delete out.goalkeepers.away;
+  }
+  if (darker !== undefined) out.darker_kit = side(darker);
+  if (Array.isArray(periods)) {
+    out.periods = periods.map((p) => {
+      const { home_attacks: ha, ...prest } = p ?? {};
+      return ha !== undefined && prest.team_a_attacks === undefined ? { ...prest, team_a_attacks: ha } : { ...prest };
+    });
+  }
+  return out;
+}
 
 async function loadFile() {
   try {
@@ -36,7 +71,12 @@ export async function allKits() {
   if (!doc) return { present: false, path: KITS, clips: {}, default: null };
   const perClip = doc.clips && typeof doc.clips === 'object' ? doc.clips : {};
   const fallback = doc.default ?? (doc.clips ? null : doc);
-  return { present: true, path: KITS, clips: perClip, default: fallback };
+  return {
+    present: true,
+    path: KITS,
+    clips: Object.fromEntries(Object.entries(perClip).map(([k, v]) => [k, normaliseKit(v)])),
+    default: normaliseKit(fallback),
+  };
 }
 
 /**

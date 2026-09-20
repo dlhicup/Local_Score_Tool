@@ -94,8 +94,8 @@ export const TEAM_B = 'Team B';
 export const TEAMS = [TEAM_A, TEAM_B, 'unknown'];
 
 export const TEAM_META = {
-  [TEAM_A]: { label: 'Team A', short: 'A', color: '#38BDF8', key: 'z', kitKey: 'home' },
-  [TEAM_B]: { label: 'Team B', short: 'B', color: '#FB923C', key: 'x', kitKey: 'away' },
+  [TEAM_A]: { label: 'Team A', short: 'A', color: '#38BDF8', key: 'z', kitKey: 'team_a' },
+  [TEAM_B]: { label: 'Team B', short: 'B', color: '#FB923C', key: 'x', kitKey: 'team_b' },
   unknown: { label: 'Unknown', short: '?', color: '#64748B', key: 'c', kitKey: null },
 };
 

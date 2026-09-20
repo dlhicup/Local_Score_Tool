@@ -192,8 +192,7 @@ export default function Inspector() {
         {/* Which shirt is which, so the tag can be read off a single frame. */}
         {kit && (
           <div className="-mt-1 flex items-center gap-3 rounded-lg border border-white/[0.06] px-2.5 py-1.5">
-            {/* kits.json keeps the spec's home/away keys; Team A is the first
-                side listed, Team B the second. */}
+            {/* kits.json keys its sides the same way the tag does. */}
             {[TEAM_A, TEAM_B].map((team) => {
               const side = TEAM_META[team].kitKey;
               return (

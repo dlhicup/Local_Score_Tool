@@ -1,18 +1,29 @@
 # Team tagging at the moment of an event, and the extra tags per event
 
+> **Amended 2026-09-19, as implemented in the Local Score Tool.** The two
+> sides are named **Team A** and **Team B** throughout, not home and away. This
+> corpus has no reliable home side, and a venue-based name invites the tag
+> being guessed from which end a team attacks — the very failure A.4 exists to
+> catch. The event tag stores `"Team A"` / `"Team B"`, and the kit file keys
+> them the same way. Everything else below is unchanged. Anything consuming
+> these files must expect the new strings; the tool also reads the old
+> `home`/`away` spellings and rewrites them on the next save, so files and kit
+> files written to the original spec load without edits. Part C records what
+> "as implemented" means in detail.
+
 For the labelling studio. 2026-09-18. (The full specification with every convention rule and the wider label plan is `labelling_spec_full.md`.)
 
 ## Part A. How to tag the team on every event
 
 ### A.1 What the tag is
 
-Every event gets one more field, `team`, with one of three values: `"home"`, `"away"`, `"unknown"`.
+Every event gets one more field, `team`, with one of three values: `"Team A"`, `"Team B"`, `"unknown"`.
 
 `team` is **the team of the player who makes the contact that defines the event's frame**. The annotator already looks at
 that player to place the frame (the kick, the first touch, the challenge), so the tag is one extra glance at the shirt.
 It should take about 3 seconds per event.
 
-Home and away are the two teams as named in the match record. A one-line kit file per match (A.5) says which colours
+Team A and Team B are simply the two sides; which is which does not matter to the model, only that the same shirt is always the same letter within a clip. A one-line kit file per match (A.5) says which colours
 they wear, so a reader of a single frame can always resolve the tag.
 
 ### A.2 The rule per event
@@ -29,7 +40,7 @@ they wear, so a reader of a single frame can always resolve the tag.
 | block | the player whose body stops the ball | the other team than the kick it blocks |
 | shot | the striker | |
 | save | the goalkeeper | the goalkeeper's team (the kit file gives both goalkeeper colours) |
-| aerial_duel | each player his own team | the duel is two labels on one frame; one says home, the other away |
+| aerial_duel | each player his own team | the duel is two labels on one frame; one says Team A, the other Team B |
 | foul | the offender | the team that concedes the free kick or penalty |
 | goal | the team credited with the goal | for an own goal the credited team is still the attacking side; add `"own_goal": true` |
 | ball_out_of_play | the player who touched the ball last before it crossed the line | the restart confirms it: the throw-in, corner or goal kick goes to the **other** team |
@@ -50,7 +61,7 @@ more is returned.
 - `pass` then `interception`: different teams.
 - `take_on` and its `tackle`: different teams.
 - `ball_out_of_play`: the team tagged is the one that does **not** take the restart.
-- Over a match, home should carry between 30 % and 70 % of the events of each class. A class where one team has more
+- Over a match, each side should carry between 30 % and 70 % of the events of each class. A class where one side has more
   than 70 % usually means the tag was filled from habit rather than from the shirt.
 
 ### A.5 The kit file, one per match: `kits.json`
@@ -58,15 +69,15 @@ more is returned.
 ```json
 {
   "match": "2026-03-14_teamA_teamB",
-  "home": {"name": "Team A", "shirt": "red", "shorts": "white", "socks": "red"},
-  "away": {"name": "Team B", "shirt": "white", "shorts": "navy", "socks": "white"},
-  "goalkeepers": {"home": "green", "away": "black"},
+  "team_a": {"name": "Team A", "shirt": "red", "shorts": "white", "socks": "red"},
+  "team_b": {"name": "Team B", "shirt": "white", "shorts": "navy", "socks": "white"},
+  "goalkeepers": {"team_a": "green", "team_b": "black"},
   "referee": "yellow",
-  "darker_kit": "home",
+  "darker_kit": "team_a",
   "kits_similar": false,
   "periods": [
-    {"period": 1, "start_s": 12.4, "end_s": 2831.0, "home_attacks": "left"},
-    {"period": 2, "start_s": 3612.0, "end_s": 6510.5, "home_attacks": "right"}
+    {"period": 1, "start_s": 12.4, "end_s": 2831.0, "team_a_attacks": "left"},
+    {"period": 2, "start_s": 3612.0, "end_s": 6510.5, "team_a_attacks": "right"}
   ]
 }
 ```
@@ -74,7 +85,7 @@ more is returned.
 - `darker_kit`: which outfield shirt is darker on screen. The model learns "darker kit" against "lighter kit" as an
   absolute label, so this field has to be right. If the two shirts are close in brightness (white against light grey,
   stripes against plain), set `"kits_similar": true` and we decide from the pixels.
-- `home_attacks`: the side of the screen the home team attacks in each period, from the main camera.
+- `team_a_attacks`: the side of the screen Team A attacks in each period, from the main camera.
 - `start_s`, `end_s`: kick-off and final whistle of each period on the video's own clock.
 - For the existing 30-second clips, the kit line belongs to the match the clip came from; where that is unknown, one
   kit line per clip is acceptable.
@@ -84,14 +95,14 @@ more is returned.
 Clip labels keep their shape with the new field:
 
 ```json
-{"groundtruth": [{"frame": 283, "action": "pass", "team": "home"},
-                 {"frame": 312, "action": "aerial_duel", "team": "home"},
-                 {"frame": 312, "action": "aerial_duel", "team": "away"},
-                 {"frame": 343, "action": "pass_received", "team": "home"}]}
+{"groundtruth": [{"frame": 283, "action": "pass", "team": "Team A"},
+                 {"frame": 312, "action": "aerial_duel", "team": "Team A"},
+                 {"frame": 312, "action": "aerial_duel", "team": "Team B"},
+                 {"frame": 343, "action": "pass_received", "team": "Team A"}]}
 ```
 
 Full matches: a folder with the video, `kits.json` and `events.json`, where each event is
-`{"t": 1834.64, "action": "pass", "team": "home"}` with `t` in seconds on the video's own clock.
+`{"t": 1834.64, "action": "pass", "team": "Team A"}` with `t` in seconds on the video's own clock.
 
 ### A.7 Order of work
 
@@ -116,7 +127,7 @@ Five fields this time, all on every event:
 
 | # | Field | Values | What it gives the model | Cost |
 |---|---|---|---|---|
-| 1 | `team` | home / away / unknown | Part A: the team of the last touch | 3 s |
+| 1 | `team` | Team A / Team B / unknown | Part A: the team of the last touch | 3 s |
 | 2 | `ball_xy` | `[x, y]`: one click on the centre of the ball at the event frame, in the video's native pixels; `null` when the ball is not visible | a ball position exactly where it matters, at the touch; 36,000 events give far more positions than any separate frame pack | 2 s |
 | 3 | `sure` | 1.0 / 0.7 / 0.3 (three anchored levels, see below) | a per-event training weight: doubtful labels train at lower weight instead of full weight, and the lowest values rank the review queue; most useful on recovery, interception, block, clearance | 1 s |
 | 4 | `body` | foot / head / hand / other | tells headers from kicks: aerial duels, headed clearances, keeper handling | 1 s |
@@ -151,9 +162,85 @@ left of the picture is visible, `right` for the right one, `none` when neither g
 Example of one event with the five fields:
 
 ```json
-{"frame": 448, "action": "tackle", "team": "away", "ball_xy": [1210, 402], "sure": 1.0, "body": "foot", "goal_view": "left"}
+{"frame": 448, "action": "tackle", "team": "Team B", "ball_xy": [1210, 402], "sure": 1.0, "body": "foot", "goal_view": "left"}
 ```
 
 In `events.json` of a full match the same fields sit next to `t` and `action`.
 
+## Part C. As implemented in the Local Score Tool
 
+Everything above is the specification. This part records the decisions the tool
+had to make to implement it, so a reader of the files is never surprised.
+
+### C.1 The two sides
+
+Stored as `"Team A"` and `"Team B"`, with `"unknown"` unchanged. Reading is
+tolerant: `home`, `away`, `team_a`, `team_b` and the canonical pair are all
+accepted, in any case and with spaces, hyphens or underscores between the
+words. Anything else becomes `unknown` rather than dropping the action. A file
+is rewritten to the canonical pair the next time its clip is saved. The kit
+file is read the same way, so a `kits.json` written with `home`/`away` keys
+still resolves.
+
+### C.2 Every field is always present
+
+A row carries all five fields, always, so a consumer never has to distinguish
+"absent" from "not applicable". Where the annotator has not answered yet, the
+value is the documented default:
+
+| field | default | meaning of the default |
+|---|---|---|
+| `team` | `"unknown"` | not yet read off the shirt |
+| `ball_xy` | `null` | not visible, or not yet clicked — these are not distinguished |
+| `sure` | `1.0` | assumed clear until said otherwise |
+| `body` | `"foot"` | the common case |
+| `goal_view` | `"none"` | the common case |
+
+`ball_xy: null` therefore carries two meanings. The guide treats "not visible"
+as a real answer, and the tool cannot tell it apart from "not yet reached". The
+share of actions still tagged `unknown` is the honest progress signal, and the
+workspace shows it against the 30 % ceiling from A.3.
+
+`body` and `goal_view` defaulting to a plausible value is a deliberate trade:
+the guide budgets one second each, which only holds if the common case needs no
+keystroke. It does mean an untouched action asserts `foot` / `none` rather than
+admitting ignorance — worth knowing when reading a batch that has not had its
+tagging pass.
+
+### C.3 `sure` in JSON
+
+JSON has one number type, so `1.0` serialises as `1`. The three levels are
+still exactly `1`, `0.7` and `0.3`; a value outside them is repaired to `1`.
+
+### C.4 Frames, not seconds
+
+Clip files store `frame` on the fixed 25 fps reporting clock, and that is the
+file's only precision — a time read back is on the 1/25 s grid. The tool snaps
+every timestamp to that grid on the way in, so a save never silently loses
+precision it appeared to have.
+
+### C.5 Tolerant reading
+
+A row whose `action` is not one of the fifteen labels, or whose `frame` is not
+a number, is dropped. A row with a bad value in any *tag* keeps the action and
+loses only the bad tag. Both `{"groundtruth": [...]}` and a bare array are
+accepted. An unreadable file reads as empty rather than throwing, because this
+runs on the path that opens a clip for an annotator.
+
+### C.6 The kit file
+
+`kits.json` at the project root, either the single-match object from A.5 used
+for every clip, or `{"clips": {"<clip filename>": {...}}, "default": {...}}`
+when clips come from different matches — which is A.5's "one kit line per clip
+is acceptable".
+
+### C.7 Not yet implemented
+
+- `events.json` for full matches (A.6) — the tool works clip by clip, one
+  ground-truth file per video, and does not yet emit the match-level shape.
+- `periods` are read but not used; `team_a_attacks` is not surfaced anywhere.
+- The A.4 checks the workspace runs are the four decidable from a single clip:
+  pass → reception same side, pass → interception different, take-on and its
+  tackle different, and an aerial duel being two events on one frame with
+  opposite sides. The 30–70 % balance check is reported as the `unknown` share
+  only; per-class balance is not yet computed.
