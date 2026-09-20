@@ -1,10 +1,11 @@
 import { NavLink, useParams, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, CheckCircle2, GraduationCap } from 'lucide-react';
+import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, CheckCircle2, GraduationCap, AlertTriangle } from 'lucide-react';
 import Logo from './Logo';
 import TagStatus from './TagStatus';
 import { useStore } from '../store/useStore';
 import { isManager } from '../lib/roles';
+import { missingBall } from '../lib/labels';
 
 function RailLink({ to, icon: Icon, label, disabled }) {
   if (disabled) {
@@ -51,6 +52,10 @@ export default function AppShell({ children }) {
   const user = useStore((s) => s.user);
   const headerDelete = useStore((s) => s.headerDelete);
   const saved = useStore((s) => s.saved);
+  // Actions still waiting on a ball answer. A save is refused while any
+  // remain, so the button says so rather than letting the refusal surprise
+  // you after the click.
+  const noBall = missingBall(events);
   const undo = useStore((s) => s.undo);
   const redo = useStore((s) => s.redo);
   const past = useStore((s) => s.past);
@@ -142,14 +147,32 @@ export default function AppShell({ children }) {
                   Never disabled: a clip whose actions were loaded from a file
                   someone else wrote has nothing "dirty" about it, and a Save
                   button that does nothing when pressed is indistinguishable
-                  from one that is broken. Pressing it always writes the file. */}
+                  from one that is broken.
+
+                  When actions are still missing a ball answer the button says
+                  so and how many, rather than letting the refusal arrive as a
+                  surprise after the click. Pressing it still does something
+                  useful: it jumps to the first one that needs answering. */}
               <button
                 onClick={() => save().catch(() => {})}
-                title={dirty ? 'Save this clip’s ground truth' : 'Write the ground-truth file again'}
-                className={dirty ? 'btn-primary' : 'btn-ghost'}
+                title={
+                  noBall.length
+                    ? `${noBall.length} action${noBall.length === 1 ? '' : 's'} still need a ball position or `
+                      + 'to be marked not visible. Click to jump to the first.'
+                    : dirty
+                      ? 'Save this clip’s ground truth'
+                      : 'Write the ground-truth file again'
+                }
+                className={
+                  noBall.length
+                    ? 'flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-400 transition hover:bg-amber-500/25'
+                    : dirty
+                      ? 'btn-primary'
+                      : 'btn-ghost'
+                }
               >
-                <Save size={15} />
-                {dirty ? 'Save' : 'Saved'}
+                {noBall.length ? <AlertTriangle size={15} /> : <Save size={15} />}
+                {noBall.length ? `${noBall.length} need ball` : dirty ? 'Save' : 'Saved'}
               </button>
             </>
           ) : (
