@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { EVENT_LABELS } from '../labels.js';
 import {
   readEvents, writeEvents, readSidecarKeys, removeGroundTruth, groundTruthExists,
-  fileFor, toFrame, GT_DIR,
+  findGroundTruth, groundTruthIndex, toFrame, GT_DIR,
 } from './gtfile.js';
 import { probeVideo } from './media.js';
 import { sweepTempFiles } from './atomic.js';
@@ -45,10 +45,62 @@ export function idForVideo(filename) {
   return `gt_${h.slice(0, 12)}`;
 }
 
-/** Every clip currently in the shared folder. */
+/**
+ * Every clip in the shared folder, at any depth.
+ *
+ * A clip is known by its filename alone, not by where it sits — that is what
+ * lets a ground-truth file handed in inside somebody's folder be matched to a
+ * video sitting at the top of video/. Two clips with the same filename in
+ * different subfolders would be the same clip to this tool, so the shallowest
+ * wins and the rest are ignored; that is reported by `duplicateClips()`.
+ */
+const MAX_DEPTH = 6;
+
+async function walkVideos(dir, out = [], depth = 0) {
+  if (depth > MAX_DEPTH) return out;
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) await walkVideos(full, out, depth + 1);
+    else if (e.isFile() && VIDEO_RE.test(e.name)) out.push(full);
+  }
+  return out;
+}
+
+const VIDEO_TTL_MS = 2000;
+let videoCache = { at: 0, byName: new Map() };
+
+export function invalidateVideoIndex() {
+  videoCache = { at: 0, byName: new Map() };
+}
+
+/** name -> { path, rel, others[] } for every clip under video/. */
+export async function videoIndex() {
+  if (videoCache.byName.size && Date.now() - videoCache.at < VIDEO_TTL_MS) return videoCache.byName;
+  const files = await walkVideos(VIDEO_DIR);
+  files.sort((a, b) => {
+    const da = a.split(path.sep).length;
+    const db = b.split(path.sep).length;
+    return da - db || a.localeCompare(b);
+  });
+  const byName = new Map();
+  for (const full of files) {
+    const name = path.basename(full);
+    if (!byName.has(name)) byName.set(name, { path: full, rel: path.relative(VIDEO_DIR, full), others: [] });
+    else byName.get(name).others.push(path.relative(VIDEO_DIR, full));
+  }
+  videoCache = { at: Date.now(), byName };
+  return byName;
+}
+
+/** The file behind a clip name, or null when we have no such clip. */
+export async function videoPath(name) {
+  const hit = (await videoIndex()).get(path.basename(String(name || '')));
+  return hit ? hit.path : null;
+}
+
 export async function listClipNames() {
-  const names = await fs.readdir(VIDEO_DIR).catch(() => []);
-  return names.filter((n) => VIDEO_RE.test(n)).sort((a, b) => a.localeCompare(b));
+  return [...(await videoIndex()).keys()].sort((a, b) => a.localeCompare(b));
 }
 
 /** id -> clip filename, or null when the id names no clip we have. */
@@ -59,9 +111,9 @@ export async function clipForId(id) {
 
 /** When a clip's ground truth was written, from the file itself. */
 async function fileTimes(filename) {
-  const target = fileFor(filename);
-  if (!target) return { createdAt: null, updatedAt: null };
-  const stat = await fs.stat(target).catch(() => null);
+  const found = await findGroundTruth(filename);
+  if (!found) return { createdAt: null, updatedAt: null };
+  const stat = await fs.stat(found.path).catch(() => null);
   if (!stat) return { createdAt: null, updatedAt: null };
   return {
     // birthtime is unreliable on some filesystems; fall back to mtime rather
@@ -99,7 +151,7 @@ export async function projectForClip(filename) {
     readEvents(filename),
     readSidecarKeys(filename),
     fileTimes(filename),
-    probeVideo(filename),
+    videoPath(filename).then(probeVideo),
   ]);
   return {
     ...emptyProject({ name: filename, video: { filename, ...media } }),
@@ -126,7 +178,7 @@ export async function listProjects() {
       byType[e.type] = (byType[e.type] ?? 0) + 1;
       if (e.team === 'unknown') unknownTeam += 1;
     }
-    const [times, media] = await Promise.all([fileTimes(name), probeVideo(name)]);
+    const [times, media] = await Promise.all([fileTimes(name), videoPath(name).then(probeVideo)]);
 
     out.push({
       id: idForVideo(name),
@@ -149,6 +201,23 @@ export async function listProjects() {
   }
   out.sort((a, b) => String(b.meta?.updatedAt ?? '').localeCompare(String(a.meta?.updatedAt ?? '')));
   return out;
+}
+
+/**
+ * Ground-truth files that match no clip we have.
+ *
+ * A hand-in whose video never made it into video/ would otherwise just not
+ * appear — the work is on disk and invisible, which is the failure this whole
+ * folder layout exists to avoid. Reported so the Library can say so.
+ */
+export async function unmatchedGroundTruth() {
+  const [index, names] = await Promise.all([groundTruthIndex(), listClipNames()]);
+  const haveClip = new Set(names.map((n) => n.replace(/\.[^.]+$/, '').toLowerCase()));
+  const out = [];
+  for (const [key, entry] of index) {
+    if (!haveClip.has(key)) out.push({ rel: entry.rel, name: path.basename(entry.rel) });
+  }
+  return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
 export async function readProject(id) {

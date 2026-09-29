@@ -3,7 +3,10 @@ import fs from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listProjects, projectForClip, idForVideo, deleteProject, VIDEO_DIR, VIDEO_RE } from '../services/store.js';
+import {
+  listProjects, projectForClip, idForVideo, deleteProject, VIDEO_DIR, VIDEO_RE,
+  videoPath, videoIndex, invalidateVideoIndex, unmatchedGroundTruth,
+} from '../services/store.js';
 import { getAssignments, assignClips } from '../services/users.js';
 import { removeGroundTruth } from '../services/gtfile.js';
 import { ensureProxy, proxyState, removeProxy } from '../services/proxy.js';
@@ -28,8 +31,22 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 // with identical duration and frame timing. Originals are never modified.
 const PROXY_DIR = path.resolve(ROOT, process.env.PROXY_DIR || 'video-proxy');
 
-/** Never let a request escape the video directory. */
-function resolveVideo(name) {
+/**
+ * A clip name -> the file behind it, wherever under video/ it sits.
+ *
+ * basename() first, so a name from a request can never point outward, and the
+ * answer is then looked up in the index rather than assumed to be at the top
+ * of the folder — clips may be organised into subfolders.
+ */
+async function resolveVideo(name) {
+  const safe = path.basename(String(name || ''));
+  if (!VIDEO_RE.test(safe)) return null;
+  const full = await videoPath(safe);
+  return full && full.startsWith(VIDEO_DIR + path.sep) ? full : null;
+}
+
+/** Where a new import lands: the top of video/, under its own name. */
+function newVideoPath(name) {
   const safe = path.basename(String(name || ''));
   if (!VIDEO_RE.test(safe)) return null;
   const full = path.join(VIDEO_DIR, safe);
@@ -52,10 +69,11 @@ const MIME = {
  */
 router.delete('/videos/:name', requireAuth, async (req, res, next) => {
   const name = path.basename(req.params.name);
-  const full = resolveVideo(name);
+  const full = await resolveVideo(name);
   if (!full) return res.status(400).json({ error: 'Bad video name' });
   try {
     await fs.unlink(full).catch((e) => { if (e.code !== 'ENOENT') throw e; });
+    invalidateVideoIndex();
     await removeProxy(name).catch(() => {});
     await deleteProject(idForVideo(name)).catch(() => {});
     await removeGroundTruth(name).catch(() => {});
@@ -74,7 +92,7 @@ router.delete('/videos/:name', requireAuth, async (req, res, next) => {
  */
 router.post('/videos/upload', requireAuth, async (req, res, next) => {
   const name = path.basename(String(req.query.name || ''));
-  const full = resolveVideo(name);
+  const full = newVideoPath(name);
   if (!full) return res.status(400).json({ error: 'Not a video filename (mp4, webm, mov, mkv, m4v)' });
   try {
     if (await fs.access(full).then(() => true, () => false)) {
@@ -91,6 +109,7 @@ router.post('/videos/upload', requireAuth, async (req, res, next) => {
     const stat = await fs.stat(tmp);
     if (stat.size < 1024) { await fs.unlink(tmp).catch(() => {}); return res.status(400).json({ error: 'Upload was empty' }); }
     await fs.rename(tmp, full);
+    invalidateVideoIndex();
     // Build a browser-safe H.264 proxy in the background so HEVC/Veo clips play.
     // The response does not wait on it; the annotate page polls /proxy for it.
     ensureProxy(name).catch(() => {});
@@ -104,10 +123,10 @@ router.post('/videos/upload', requireAuth, async (req, res, next) => {
 router.get('/videos', requireAuth, async (req, res, next) => {
   try {
     const allowed = await visibleTo(req.user);
-    const [names, projects] = await Promise.all([
-      fs.readdir(VIDEO_DIR).catch(() => []),
-      listProjects(),
-    ]);
+    // Clips may sit in subfolders, so the index is the list — not a readdir
+    // of the top level.
+    const [index, projects] = await Promise.all([videoIndex(), listProjects()]);
+    const names = [...index.keys()];
 
     const byFile = new Map();
     for (const p of projects) {
@@ -119,7 +138,7 @@ router.get('/videos', requireAuth, async (req, res, next) => {
     // to the filesystem is what made this list slow.
     const eligible = names.filter((name) => VIDEO_RE.test(name) && (!allowed || allowed.has(name)));
     const [stats, proxies] = await Promise.all([
-      Promise.all(eligible.map((name) => fs.stat(path.join(VIDEO_DIR, name)).catch(() => null))),
+      Promise.all(eligible.map((name) => fs.stat(index.get(name).path).catch(() => null))),
       Promise.all(eligible.map((name) => proxyState(name).then((p) => p.state).catch(() => 'none'))),
     ]);
     const videos = [];
@@ -135,6 +154,8 @@ router.get('/videos', requireAuth, async (req, res, next) => {
 
       videos.push({
         name,
+        // Where it sits under video/, so a clip in a subfolder is findable.
+        rel: index.get(name).rel,
         size: stat.size,
         mtime: stat.mtimeMs,
         proxy: proxies[i], // ready | encoding | failed | unavailable | none
@@ -162,6 +183,8 @@ router.get('/videos', requireAuth, async (req, res, next) => {
     res.json({
       videos,
       dir: VIDEO_DIR,
+      // Hand-ins whose clip is not in video/ — otherwise invisible.
+      unmatched: await unmatchedGroundTruth(),
       summary: {
         total: videos.length,
         todo: videos.filter((v) => v.status === 'todo').length,
@@ -175,7 +198,7 @@ router.get('/videos', requireAuth, async (req, res, next) => {
 
 /** Byte-range streaming, so the player can seek without downloading the file. */
 router.get('/videos/file/:name', requireAuth, async (req, res, next) => {
-  const full = resolveVideo(req.params.name);
+  const full = await resolveVideo(req.params.name);
   if (!full) return res.status(400).json({ error: 'Bad video name' });
 
   const allowed = await visibleTo(req.user);
@@ -286,7 +309,7 @@ router.get('/videos/file/:name', requireAuth, async (req, res, next) => {
  */
 router.get('/videos/:name/proxy', requireAuth, async (req, res, next) => {
   const name = path.basename(req.params.name);
-  if (!resolveVideo(name)) return res.status(400).json({ error: 'Bad video name' });
+  if (!(await resolveVideo(name))) return res.status(400).json({ error: 'Bad video name' });
   try {
     const current = await proxyState(name);
     // Start one lazily, but never re-trigger a job that is already running or a
@@ -302,7 +325,7 @@ router.get('/videos/:name/proxy', requireAuth, async (req, res, next) => {
 
 /** Find the ground truth for a clip, or start one. Idempotent by filename. */
 router.post('/videos/:name/open', requireAuth, async (req, res, next) => {
-  const full = resolveVideo(req.params.name);
+  const full = await resolveVideo(req.params.name);
   if (!full) return res.status(400).json({ error: 'Bad video name' });
 
   const allowed = await visibleTo(req.user);

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { videoPath } from './store.js';
 
 /**
  * Browser-safe proxies.
@@ -95,7 +96,8 @@ function runFfprobe(file) {
  * guessing would only convert clips that were already fine.
  */
 export async function isBrowserPlayable(name) {
-  const file = path.join(VIDEO_DIR, path.basename(name));
+  const file = await videoPath(name);
+  if (!file) return null;
   const stat = await fs.stat(file).catch(() => null);
   if (!stat) return null;
 
@@ -146,10 +148,13 @@ function hmsToSeconds(hms) {
 function runEncode(name, onProgress) {
   const proxyPath = proxyPathFor(name);
   if (!proxyPath) return Promise.reject(new Error('Not a video filename'));
-  const input = path.join(VIDEO_DIR, path.basename(name));
   const tmp = `${proxyPath}.encoding`;
 
   return (async () => {
+    // Clips may live in subfolders of video/, so ask the index where this one
+    // actually is rather than assuming the top level.
+    const input = await videoPath(name);
+    if (!input) throw new Error(`No such clip: ${name}`);
     await fs.mkdir(PROXY_DIR, { recursive: true });
     await fs.unlink(tmp).catch(() => {});
 

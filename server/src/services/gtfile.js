@@ -52,14 +52,101 @@ export const toSeconds = (frame) => Number((Number(frame) / REPORTING_FPS).toFix
  * folder or is not a usable filename.
  */
 export function fileFor(videoName) {
+  const base = clipKey(videoName);
+  if (!base) return null;
+  const full = path.join(GT_DIR, `${base}.json`);
+  return full.startsWith(GT_DIR + path.sep) ? full : null;
+}
+
+/**
+ * The name a clip and its ground truth share: the filename without extension.
+ * Returns null for anything that could escape the folder or is not a usable
+ * filename.
+ */
+function clipKey(name) {
   // basename() drops any directory part, so what remains cannot point outward.
-  const base = path.basename(String(videoName || '')).replace(/\.[^.]+$/, '').trim();
+  const base = path.basename(String(name || '')).replace(/\.[^.]+$/, '').trim();
   if (!base || base === '.' || base === '..') return null;
   // Belt and braces: separators (basename only strips "\" on Windows), and the
   // characters no filesystem accepts in a name.
   if (/[\\/\0]/.test(base) || /[<>:"|?*\x00-\x1f]/.test(base)) return null;
-  const full = path.join(GT_DIR, `${base}.json`);
-  return full.startsWith(GT_DIR + path.sep) ? full : null;
+  return base;
+}
+
+/**
+ * Where ground truth actually lives.
+ *
+ * Annotators hand work in however suits them — a folder per person, a bundle
+ * with its own video and a nested `groundtruth/` inside it, a zip unpacked in
+ * place. Insisting every file sit at the top of groundtruth/ would mean
+ * rearranging somebody's hand-in before it could be reviewed, so instead the
+ * folder is searched to any reasonable depth and files are matched to clips by
+ * name. A file is read and rewritten where it lies; nothing is moved.
+ */
+const MAX_DEPTH = 6;
+
+async function walkJson(dir, out = [], depth = 0) {
+  if (depth > MAX_DEPTH) return out;
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) await walkJson(full, out, depth + 1);
+    else if (e.isFile() && e.name.toLowerCase().endsWith('.json')) out.push(full);
+  }
+  return out;
+}
+
+// Files arrive from outside the app — copied in, unzipped — so the index
+// cannot be cached for long. A couple of seconds is enough to keep one page
+// load from walking the tree once per clip, and short enough that a file
+// dropped in shows up on the next refresh.
+const INDEX_TTL_MS = 2000;
+let indexCache = { at: 0, byKey: new Map() };
+
+export function invalidateGroundTruthIndex() {
+  indexCache = { at: 0, byKey: new Map() };
+}
+
+export async function groundTruthIndex() {
+  if (indexCache.byKey.size && Date.now() - indexCache.at < INDEX_TTL_MS) return indexCache.byKey;
+
+  const files = await walkJson(GT_DIR);
+  // Shallowest wins, then alphabetical, so which file is chosen never depends
+  // on the order the filesystem happened to return.
+  files.sort((a, b) => {
+    const da = a.split(path.sep).length;
+    const db = b.split(path.sep).length;
+    return da - db || a.localeCompare(b);
+  });
+
+  const byKey = new Map();
+  for (const full of files) {
+    const key = clipKey(path.basename(full));
+    if (!key) continue;
+    const k = key.toLowerCase();
+    if (!byKey.has(k)) byKey.set(k, { path: full, rel: path.relative(GT_DIR, full), others: [] });
+    // Two annotators can label the same clip. Only one can be opened, but the
+    // rest are reported so a duplicate is visible rather than silently ignored.
+    else byKey.get(k).others.push(path.relative(GT_DIR, full));
+  }
+  indexCache = { at: Date.now(), byKey };
+  return byKey;
+}
+
+/** Where a clip's ground truth is, or null when it has none anywhere. */
+export async function findGroundTruth(videoName) {
+  const key = clipKey(videoName);
+  if (!key) return null;
+  return (await groundTruthIndex()).get(key.toLowerCase()) ?? null;
+}
+
+/**
+ * Where to write a clip's ground truth: back where it already lives, or at the
+ * top of groundtruth/ when it is new. A save never relocates somebody's file.
+ */
+export async function targetFor(videoName) {
+  const found = await findGroundTruth(videoName);
+  return found ? found.path : fileFor(videoName);
 }
 
 const uid = () => `evt_${crypto.randomBytes(6).toString('hex')}`;
@@ -133,8 +220,9 @@ export function sanitiseEvent(e) {
  * Both shapes are accepted: `{"groundtruth": [...]}` and a bare array.
  */
 export async function readEvents(videoName) {
-  const target = fileFor(videoName);
-  if (!target) return [];
+  const found = await findGroundTruth(videoName);
+  if (!found) return [];
+  const target = found.path;
   let doc;
   try {
     doc = JSON.parse(await fs.readFile(target, 'utf8'));
@@ -150,8 +238,9 @@ export async function readEvents(videoName) {
 
 /** The non-event keys of a clip's file, so a save cannot drop them. */
 export async function readSidecarKeys(videoName) {
-  const target = fileFor(videoName);
-  if (!target) return {};
+  const found = await findGroundTruth(videoName);
+  if (!found) return {};
+  const target = found.path;
   try {
     const doc = JSON.parse(await fs.readFile(target, 'utf8'));
     if (Array.isArray(doc)) return {};
@@ -196,7 +285,7 @@ export const ballAnswered = (e) => e?.ball_xy !== undefined;
  * valid JSON document.
  */
 export async function writeEvents(videoName, events, extraKeys = {}) {
-  const target = fileFor(videoName);
+  const target = await targetFor(videoName);
   if (!target) return null;
 
   const rows = (events ?? [])
@@ -222,16 +311,22 @@ export async function writeEvents(videoName, events, extraKeys = {}) {
         .join(',\n')},\n  "groundtruth": ${list}\n}\n`
     : `{"groundtruth":${list}}\n`;
 
-  await fs.mkdir(GT_DIR, { recursive: true });
+  // The clip's file may live in a subfolder somebody handed in; create the
+  // folder it belongs to, not just the root.
+  await fs.mkdir(path.dirname(target), { recursive: true });
   // Write-then-rename so a crash cannot leave a half-written file.
   await writeFileAtomic(target, body);
+  // A brand-new file has to appear in the index straight away, or the save
+  // that just created it would be followed by a read that cannot find it.
+  invalidateGroundTruthIndex();
   return { path: target, count: rows.length };
 }
 
 /** Remove a clip's ground truth when the clip itself is removed. */
 export async function removeGroundTruth(videoName) {
-  const target = fileFor(videoName);
-  if (!target) return;
+  const found = await findGroundTruth(videoName);
+  if (!found) return;
+  const target = found.path;
   await fs.unlink(target).catch((e) => {
     if (e.code !== 'ENOENT') throw e;
   });
@@ -239,9 +334,9 @@ export async function removeGroundTruth(videoName) {
 
 /** Whether a clip has a ground-truth file on disk right now. */
 export async function groundTruthExists(videoName) {
-  const target = fileFor(videoName);
-  if (!target) return false;
-  return fs.access(target).then(() => true, () => false);
+  const found = await findGroundTruth(videoName);
+  if (!found) return false;
+  return fs.access(found.path).then(() => true, () => false);
 }
 
 export { GT_DIR, REPORTING_FPS };

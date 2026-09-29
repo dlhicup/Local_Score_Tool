@@ -16,8 +16,6 @@ import { fileURLToPath } from 'node:url';
  * when ffprobe is missing, which is not fatal: the annotate page learns the
  * real duration from the video element as soon as the clip loads.
  */
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const VIDEO_DIR = path.resolve(ROOT, process.env.VIDEO_DIR || 'video');
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE =
   process.env.FFPROBE_PATH ||
@@ -50,12 +48,12 @@ function runFfprobe(file) {
   });
 }
 
-export async function probeVideo(name) {
-  const file = path.join(VIDEO_DIR, path.basename(name));
+export async function probeVideo(file) {
+  if (!file) return { ...EMPTY };
   const stat = await fs.stat(file).catch(() => null);
   if (!stat) return { ...EMPTY };
 
-  const key = `${path.basename(name)}:${stat.size}:${Math.floor(stat.mtimeMs)}`;
+  const key = `${file}:${stat.size}:${Math.floor(stat.mtimeMs)}`;
   if (cache.has(key)) return cache.get(key);
 
   const info = await runFfprobe(file);

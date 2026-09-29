@@ -239,6 +239,31 @@ export default function Library() {
                 {data.dir}
               </p>
             )}
+
+            {/* Ground truth handed in for a clip that is not in video/. The
+                work is on disk and would otherwise simply not appear, which
+                is the one failure this layout exists to prevent. */}
+            {data?.unmatched?.length > 0 && (
+              <div className="mt-3 max-w-[60ch] rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2">
+                <p className="text-2xs font-semibold text-amber-400">
+                  {data.unmatched.length} ground-truth file{data.unmatched.length === 1 ? '' : 's'} with no matching clip
+                </p>
+                <p className="mt-0.5 text-2xs leading-snug text-ink-400">
+                  Put the video in <span className="font-mono">video/</span> under the same name and it will appear here
+                  with its actions.
+                </p>
+                <ul className="mt-1.5 space-y-0.5">
+                  {data.unmatched.slice(0, 6).map((u) => (
+                    <li key={u.rel} className="truncate font-mono text-2xs text-ink-500" title={u.rel}>
+                      {u.rel}
+                    </li>
+                  ))}
+                  {data.unmatched.length > 6 && (
+                    <li className="text-2xs text-ink-600">…and {data.unmatched.length - 6} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

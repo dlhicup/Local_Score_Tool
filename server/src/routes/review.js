@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listProjects, readProject, writeProject, idForVideo, VIDEO_DIR } from '../services/store.js';
+import { listProjects, readProject, writeProject, idForVideo, listClipNames } from '../services/store.js';
 import { getAssignments } from '../services/users.js';
 import { isValidLabel } from '../labels.js';
 import { requireAdmin } from '../middleware/auth.js';
@@ -64,7 +64,7 @@ router.get('/review/queue', requireAdmin, async (_req, res, next) => {
     const [projects, assignments, names] = await Promise.all([
       listProjects(),
       getAssignments(),
-      fs.readdir(VIDEO_DIR).catch(() => []),
+      listClipNames(),
     ]);
     const byFile = new Map();
     for (const p of projects) if (p.video?.filename) byFile.set(p.video.filename, p);

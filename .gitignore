@@ -1,18 +1,21 @@
 node_modules/
 **/node_modules/
 web/dist/
-# team data + shared videos live on the host, never in the repo
-video/*.mp4
-video/*.webm
-video/*.mov
-video/*.mkv
-video/*.m4v
+
+# The team's footage and their work. All host-local, never in the repo.
+video/
+!video/README.md
 video-proxy/
-# stranded by an interrupted atomic write
-groundtruth/*.tmp
-groundtruth/*.json
-exam/*.json
-exam/*.mp4
+
+# Everything annotators hand in — however they organise it. Subfolders per
+# person, bundles with their own video, zips: none of it belongs in git, and
+# listing extensions one by one only invites the next surprise.
+groundtruth/
+!groundtruth/.gitkeep
+
+exam/
+!exam/.gitkeep
+
 .env
 **/.env
 *.log

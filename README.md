@@ -360,11 +360,32 @@ carry two more keys, both optional:
 ```
 
 That is what makes reviewing someone else's work a copy: **drop their
-`<clip name>.json` into `groundtruth/`, put the clip in `video/`, and open
-it** — their actions, their name and any verdict come with the file. There is
-nothing to import and no second folder to keep in step. Anything else already
-in the file that this tool does not recognise is preserved on save, so a field
-another tool added is never dropped.
+`<clip name>.json` anywhere under `groundtruth/`, put the clip in `video/`,
+and open it** — their actions, their name and any verdict come with the file.
+There is nothing to import and no second folder to keep in step. Anything else
+already in the file that this tool does not recognise is preserved on save, so
+a field another tool added is never dropped.
+
+**Organise both folders however you like.** `groundtruth/` and `video/` are
+searched to any reasonable depth, and a file is matched to a clip **by name**,
+not by where it sits — so a hand-in can stay exactly as it arrived:
+
+```
+groundtruth/
+  DataSoft/Veo - 1st XI football vs. Shrewsbury.json
+  MG Kibria/St. Louis City SC-1.json
+  Tillottoma/Veo U19 Sl Gw18 Paok-Volos 3-0 Cut.json
+  Brooke House Cut_1/groundtruth/Brooke House Cut_1.json    ← nested bundles are fine
+```
+
+A file is read and rewritten **where it lies** — saving never relocates
+somebody's hand-in. A new clip's first save lands at the top of `groundtruth/`.
+
+Two things to know. If the same clip name appears more than once, the
+shallowest file wins and the others are ignored — two annotators labelling one
+clip cannot both be opened. And a ground-truth file whose clip is **not** in
+`video/` cannot be shown at all, so the Library lists those separately: put the
+video in place under the same name and it appears with its actions.
 
 Edit times come from the file's own timestamps, and duration and frame size are
 read from the video, so nothing has to be cached anywhere.
