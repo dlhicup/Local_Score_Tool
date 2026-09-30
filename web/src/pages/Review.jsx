@@ -7,6 +7,7 @@ import {
 import VideoStage from '../components/VideoStage';
 import Timeline from '../components/Timeline';
 import Inspector from '../components/Inspector';
+import KeyGuide from '../components/KeyGuide';
 import Shortcuts from '../components/Shortcuts';
 import ActionMenu from '../components/ActionMenu';
 import ConfirmDelete from '../components/ConfirmDelete';
@@ -65,6 +66,14 @@ export default function Review() {
   );
 
   const [showKeys, setShowKeys] = useState(false);
+  // The key reference beside the picture. Remembered per browser: an annotator
+  // who knows the fifteen keys should not have to close it every session.
+  const [keysOpen, setKeysOpen] = useState(() => {
+    try { return localStorage.getItem(scoregt.keyguide) !== closed; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(scoregt.keyguide, keysOpen ? open : closed); } catch { /* storage blocked */ }
+  }, [keysOpen]);
   const [menu, setMenu] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -301,11 +310,19 @@ export default function Review() {
           </div>
         </div>
 
-        {selectedId && (
-          <aside className="w-[340px] shrink-0 overflow-y-auto">
-            <Inspector />
-          </aside>
-        )}
+        {/* The right column, never over the picture — only beside it. It holds
+            the key reference always, and the inspector when an action is
+            selected. Collapsing the reference gives the width back. */}
+        <aside
+          className={`shrink-0 overflow-y-auto transition-[width] duration-150 ${
+            selectedId || keysOpen ? 'w-[340px]' : 'w-9'
+          }`}
+        >
+          <div className="space-y-3">
+            {selectedId && <Inspector />}
+            <KeyGuide open={keysOpen} onToggle={() => setKeysOpen((v) => !v)} />
+          </div>
+        </aside>
       </div>
 
       <ActionMenu

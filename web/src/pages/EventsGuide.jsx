@@ -5,6 +5,28 @@ import { EVENT_LABELS, LABEL_META, LABEL_GROUPS, LABEL_DEFINITIONS, labelTitle }
  * A reference document for annotators: the 15 event types, what each means, and
  * the key that marks it. Grouped the way the timeline lanes are grouped.
  */
+/**
+ * A.2 of the labelling guide: whose team the tag names, for each action.
+ * [label, whose team, the note that stops the common mistake]
+ */
+const TEAM_RULES = [
+  ['pass', 'the kicker', ''],
+  ['pass_received', 'the receiver', 'always the same team as the pass before it. If the ball reaches an opponent it is not a reception at all — it is a recovery or an interception'],
+  ['recovery', 'whoever’s touch establishes possession', 'usually the other team than the last kicker, but not always: a loose ball can be recovered by the kicker’s own team-mate'],
+  ['interception', 'the player who cuts the pass out', 'always the other team than the pass'],
+  ['tackle', 'the tackler', 'the opponent of the ball carrier. A take_on and the tackle of the same duel carry different teams'],
+  ['take_on', 'the ball carrier', ''],
+  ['clearance', 'the player who clears', ''],
+  ['block', 'the player whose body stops the ball', 'the other team than the kick it blocks'],
+  ['shot', 'the striker', ''],
+  ['save', 'the goalkeeper', 'the keeper’s own team — the kit file gives both goalkeeper colours'],
+  ['aerial_duel', 'each player his own team', 'two labels on one frame: one says Team A, the other Team B'],
+  ['foul', 'the offender', 'the team that concedes the free kick or penalty'],
+  ['goal', 'the team credited with the goal', 'for an own goal the credited team is still the attacking side — tick Own goal on the event'],
+  ['ball_out_of_play', 'whoever touched it last before it crossed the line', 'the restart confirms it: the throw-in, corner or goal kick goes to the other team'],
+  ['substitution', 'the team making the change', ''],
+];
+
 export default function EventsGuide() {
   const byGroup = LABEL_GROUPS.map((g) => ({
     group: g,
@@ -103,6 +125,51 @@ export default function EventsGuide() {
               </dd>
             </div>
           </dl>
+        </div>
+
+        {/* A.2 — whose team the tag names, action by action. */}
+        <div className="mt-4 rounded-xl border border-white/[0.06] bg-ink-800/60 p-5">
+          <h2 className="mb-1 text-sm font-semibold text-white">Whose team, action by action</h2>
+          <p className="mb-3 max-w-[62ch] text-2xs leading-relaxed text-ink-500">
+            The tag is the team of the player whose <b>contact defines the frame</b> — the one you were already
+            watching to place the mark. Not the team in possession, and never the direction of play.
+          </p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody>
+                {TEAM_RULES.map(([label, whose, note]) => (
+                  <tr key={label} className="border-b border-white/[0.04] align-top last:border-0">
+                    <td className="py-1.5 pr-3 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ background: LABEL_META[label].color }}
+                        />
+                        <code className="text-2xs text-ink-200">{label}</code>
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-3 text-xs text-ink-200">{whose}</td>
+                    <td className="py-1.5 text-2xs leading-snug text-ink-500">{note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mt-3 max-w-[62ch] text-2xs leading-relaxed text-ink-400">
+            <b className="text-ink-200">Deflections:</b> tag the player who performed the action you are labelling, not
+            the body it deflected off. A pass that deflects is still the passer's pass; if you label the deflection
+            itself as a <b>block</b>, that block carries the blocker's team.
+          </p>
+          <p className="mt-1.5 max-w-[62ch] text-2xs leading-relaxed text-ink-400">
+            <b className="text-ink-200">A worked example.</b> Team B kicks it long; two players contest it in the air;
+            a Team A player collects the loose ball; another Team A player hoofs it clear. That is five events —{' '}
+            <code className="text-2xs">pass</code> (B), two <code className="text-2xs">aerial_duel</code> on the same
+            frame (one A, one B), <code className="text-2xs">recovery</code> (A),{' '}
+            <code className="text-2xs">clearance</code> (A). Not a reception: the kicker and the receiver are on
+            different sides. Not an interception either, because the duel made the ball loose first.
+          </p>
         </div>
 
         {/* The guide's own consistency checks. */}
