@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
-import { ClipboardList, Plus, Minus, Move, Tag } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ClipboardList, Plus, Minus, Move, Tag, CheckCircle2, Loader2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { reviewDiff, tallyTotal } from '../lib/review';
 import { LABEL_META, labelTitle } from '../lib/labels';
+import { relativeTime } from '../lib/format';
 
 /**
  * What this review has changed so far, beside the picture.
@@ -54,8 +55,26 @@ export default function ReviewChanges() {
   const events = useStore((s) => s.events);
   const baseline = useStore((s) => s.reviewBaseline);
   const priorCount = useStore((s) => s.project?.meta?.reviews?.length ?? 0);
+  const reviewed = useStore((s) => s.project?.meta?.reviewed ?? null);
+  const finishReview = useStore((s) => s.finishReview);
+  const [finishing, setFinishing] = useState(false);
 
   const d = useMemo(() => reviewDiff(baseline, events), [baseline, events]);
+
+  // Signed off, and nothing touched since: the one state in which there is
+  // nothing left to do on this clip.
+  const settled = Boolean(reviewed) && d.touched === 0;
+
+  const finish = async () => {
+    setFinishing(true);
+    try {
+      await finishReview();
+    } catch {
+      /* the store has already said why — a missing ball answer, usually */
+    } finally {
+      setFinishing(false);
+    }
+  };
 
   return (
     <div className="panel p-3">
@@ -89,11 +108,50 @@ export default function ReviewChanges() {
         </>
       )}
 
-      {priorCount > 0 && (
-        <p className="mt-2 border-t border-white/[0.06] pt-2 text-2xs text-ink-500">
-          Reviewed {priorCount} time{priorCount === 1 ? '' : 's'} before.
-        </p>
-      )}
+      <div className="mt-3 border-t border-white/[0.06] pt-3">
+        {/* Signing off and saving are one request: a sign-off must not be able
+            to land without the actions it signs off on. */}
+        <button
+          onClick={finish}
+          disabled={finishing}
+          title={
+            settled
+              ? 'Already signed off. Press to sign off again.'
+              : reviewed
+                ? 'Sign the clip off again, with the changes you have just made'
+                : 'Save the clip and mark it reviewed'
+          }
+          className={
+            settled
+              ? 'flex w-full items-center justify-center gap-1.5 rounded-lg border border-pitch-500/40 bg-pitch-500/[0.10] px-3 py-1.5 text-xs font-semibold text-pitch-400 transition hover:bg-pitch-500/20 disabled:opacity-50'
+              : 'btn-primary w-full justify-center'
+          }
+        >
+          {finishing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+          {finishing ? 'Finishing…' : settled ? 'Reviewed' : 'Finish review'}
+        </button>
+
+        {reviewed ? (
+          <p className="mt-1.5 text-2xs leading-snug text-ink-500">
+            Signed off{reviewed.by ? ` by ${reviewed.by}` : ''}
+            {reviewed.at ? ` ${relativeTime(reviewed.at)}` : ''}
+            {typeof reviewed.actions === 'number' ? ` over ${reviewed.actions} actions` : ''}.
+            {d.touched > 0 && (
+              <span className="text-amber-400"> Your changes clear that until you finish again.</span>
+            )}
+          </p>
+        ) : (
+          <p className="mt-1.5 text-2xs leading-snug text-ink-600">
+            Marks the clip reviewed in the Library. Any later change to its actions clears the mark.
+          </p>
+        )}
+
+        {priorCount > 0 && (
+          <p className="mt-1.5 text-2xs text-ink-600">
+            {priorCount} earlier review{priorCount === 1 ? '' : 's'} on record.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

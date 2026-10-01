@@ -171,6 +171,8 @@ router.get('/videos', requireAuth, async (req, res, next) => {
               duration: p.duration,
               updatedAt: p.meta?.updatedAt ?? null,
               review: p.review ?? null,
+              // Who signed the clip off, if anyone — drives the Reviewed button.
+              reviewed: p.reviewed ?? null,
             }
           : null,
         // Three states drive the whole list: untouched, extracted but not fully

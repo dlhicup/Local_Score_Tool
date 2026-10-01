@@ -164,6 +164,7 @@ export async function projectForClip(filename) {
       // What past reviews changed, oldest first. Read-only to the client; the
       // server is the only thing that appends to it.
       reviews: Array.isArray(extra.reviews) ? extra.reviews.filter((x) => x && typeof x === 'object') : [],
+      reviewed: extra.reviewed && typeof extra.reviewed === 'object' ? extra.reviewed : null,
     },
   };
 }
@@ -200,6 +201,7 @@ export async function listProjects() {
       duration: media.duration,
       meta: { ...times, review: extra.review ?? null, annotator: extra.annotator ?? null },
       review: extra.review ?? null,
+      reviewed: extra.reviewed && typeof extra.reviewed === 'object' ? extra.reviewed : null,
       annotator: extra.annotator ?? null,
     });
   }
@@ -238,8 +240,13 @@ export async function readProject(id) {
  * `appendReview` adds one line to the clip's review log — see reviewlog.js.
  * The log is capped, oldest first, so a clip that is reviewed every week does
  * not end up with more history above its actions than actions.
+ *
+ * `reviewed` is the clip's sign-off: who finished reviewing it and when.
+ * Passing an object records one; passing `null` clears it. It is cleared
+ * whenever the actions change, so "reviewed" keeps meaning "signed off, and
+ * nothing has happened to it since" rather than "signed off once, long ago".
  */
-export async function writeProject(project, { appendReview = null } = {}) {
+export async function writeProject(project, { appendReview = null, reviewed } = {}) {
   const filename = project?.video?.filename;
   if (!filename) throw Object.assign(new Error('Project has no clip'), { status: 400 });
 
@@ -259,6 +266,11 @@ export async function writeProject(project, { appendReview = null } = {}) {
   if (appendReview) {
     const log = Array.isArray(existing.reviews) ? existing.reviews.filter((x) => x && typeof x === 'object') : [];
     extra.reviews = [...log, appendReview].slice(-REVIEW_LOG_MAX);
+  }
+
+  if (reviewed !== undefined) {
+    if (reviewed) extra.reviewed = reviewed;
+    else delete extra.reviewed;
   }
 
   const written = await writeEvents(filename, project.events ?? [], extra);

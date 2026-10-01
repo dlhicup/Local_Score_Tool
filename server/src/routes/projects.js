@@ -5,7 +5,7 @@ import {
 import { summarise } from '../services/merge.js';
 import { sanitiseEvent, ballAnswered, groundTruthExists, toFrame, REPORTING_FPS } from '../services/gtfile.js';
 import { getAssignments } from '../services/users.js';
-import { reviewEntry } from '../services/reviewlog.js';
+import { reviewEntry, sameActions } from '../services/reviewlog.js';
 import { requireAuth } from '../middleware/auth.js';
 import { EVENT_LABELS } from '../labels.js';
 
@@ -105,7 +105,22 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
         })
       : null;
 
-    const { project: stored, written } = await writeProject(project, { appendReview: entry });
+    /**
+     * Finishing a review signs the clip off: who, when, and over how many
+     * actions. The sign-off is cleared instead whenever a save changes the
+     * actions, whoever made it and from whichever page — otherwise a clip could
+     * sit marked "reviewed" after somebody had rewritten half of it, which is
+     * worse than carrying no mark at all.
+     */
+    const finishing = req.body?.finishReview === true;
+    const changed = !sameActions(existing.events, events);
+    const reviewed = finishing
+      ? { by: req.user?.username ?? null, at: new Date().toISOString(), actions: events.length }
+      : changed
+        ? null
+        : undefined; // untouched: leave whatever the file already says
+
+    const { project: stored, written } = await writeProject(project, { appendReview: entry, reviewed });
 
     res.json({
       project: stored,
@@ -113,6 +128,7 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
       groundTruthFile: written ? { path: written.path, count: written.count } : null,
       saved: Boolean(written),
       review: entry,
+      reviewed: stored.meta?.reviewed ?? null,
     });
   } catch (err) {
     next(err);

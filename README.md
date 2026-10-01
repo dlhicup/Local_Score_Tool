@@ -187,6 +187,18 @@ label and one more of the new one.
 The header shows a **Reviewing** badge whenever you are in that mode, so it is
 never possible to be recording without knowing.
 
+**Finish review** — at the bottom of that panel — saves the clip and signs it
+off in one request, so a sign-off can never land without the actions it signs
+off on. The clip's row in the Library then reads **Reviewed** in green instead
+of **Review**, with who signed it off and when in the tooltip. It is still
+clickable: a signed-off clip can be reopened and reviewed again.
+
+A sign-off means *"reviewed, and nothing has happened to it since"*. Any save
+that changes the actions clears it — from either page, by anyone, including a
+changed tag or a moved frame. The panel warns you while you hold unsaved
+changes, and the button goes back to **Finish review** so you can sign the new
+state off. A save that changes nothing leaves the sign-off alone.
+
 ### Keyboard
 
 | key | action |
@@ -373,12 +385,19 @@ carry two more keys, both optional:
 ```json
 {
   "annotator": "Dmytro",
+  "reviewed": {"by": "ana", "at": "2026-10-01T06:25:02.880Z", "actions": 183},
   "reviews": [
     {"at":"2026-10-01T06:23:20.244Z","by":"ana","before":181,"after":183,"added":{"pass":3},"removed":{"tackle":1},"retimed":4,"retagged":7}
   ],
   "groundtruth": [ … ]
 }
 ```
+
+`reviewed` is the sign-off: the clip has been reviewed and nothing has changed
+since. It is written by **Finish review** and deleted again by any save that
+changes the actions, so its presence is a claim about the file as it stands,
+not a record that somebody once looked at it. The Library reads it to show
+**Reviewed** instead of **Review**.
 
 `reviews` is the clip's review history, oldest first, one line per review that
 changed something — written by the **Review** button, never by hand. `before`

@@ -195,7 +195,12 @@ export const useStore = create((set, get) => ({
     return project;
   },
 
-  saveProject: async ({ silent = false } = {}) => {
+  /**
+   * Write the clip. `finish` also signs the review off, which is the same
+   * request on purpose: a sign-off must not be able to land without the
+   * actions it signs off on, and the ball check below can still refuse both.
+   */
+  saveProject: async ({ silent = false, finish = false } = {}) => {
     const { project, events, reviewing, reviewBaseline } = get();
     if (!project) return;
 
@@ -235,6 +240,7 @@ export const useStore = create((set, get) => ({
         diff && diff.touched
           ? { added: diff.added, removed: diff.removed, retimed: diff.retimed, retagged: diff.retagged }
           : null,
+        finish,
       );
       const stored = res.project;
       const written = sortEvents(stored.events);
@@ -257,11 +263,12 @@ export const useStore = create((set, get) => ({
               res.review.retagged ? `${res.review.retagged} retagged` : null,
             ].filter(Boolean).join(' · ')
           : '';
-        get().toast(
-          (f ? `Saved ${f.count} actions to ${f.path.split(/[\\/]/).pop()}` : 'Ground truth saved')
-            + (logged ? ` — review logged: ${logged}` : ''),
-          'success',
-        );
+        const head = finish && res.reviewed
+          ? `Review finished — ${f ? f.count : written.length} actions signed off`
+          : f
+            ? `Saved ${f.count} actions to ${f.path.split(/[\\/]/).pop()}`
+            : 'Ground truth saved';
+        get().toast(head + (logged ? ` — review logged: ${logged}` : ''), 'success');
       }
     } catch (err) {
       // Rethrow so callers that paid for this data can react, not just toast.
@@ -269,6 +276,9 @@ export const useStore = create((set, get) => ({
       throw err;
     }
   },
+
+  /** Save and sign the review off in one request. */
+  finishReview: () => get().saveProject({ finish: true }),
 
   /**
    * Throw away this clip's ground truth entirely — the working record and the

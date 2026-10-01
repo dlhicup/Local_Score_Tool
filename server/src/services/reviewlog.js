@@ -1,4 +1,5 @@
 import { EVENT_LABELS, LABEL_SET } from '../labels.js';
+import { toFrame } from './gtfile.js';
 
 /**
  * A clip's review log: one line per review save that changed something.
@@ -19,6 +20,38 @@ import { EVENT_LABELS, LABEL_SET } from '../labels.js';
 
 /** How many entries a file keeps. Older ones fall off the front. */
 export const REVIEW_LOG_MAX = 50;
+
+/**
+ * Everything about one action that the file actually stores, as a string.
+ *
+ * Only what is written counts: a timestamp is compared at the frame it lands
+ * on, because that is the file's only precision, and anything finer would make
+ * a re-save look like a change.
+ */
+const signature = (e) =>
+  [
+    toFrame(e?.timestamp),
+    e?.type,
+    e?.team,
+    e?.sure,
+    e?.body,
+    e?.goal_view,
+    e?.ball_xy === undefined ? 'open' : e.ball_xy === null ? 'hidden' : `${e.ball_xy[0]},${e.ball_xy[1]}`,
+    e?.own_goal === true ? 'og' : '',
+  ].join(':');
+
+/**
+ * Do these two sets of actions say the same thing?
+ *
+ * Sorted, so a difference in the order two actions on one frame happen to be
+ * listed in is not mistaken for an edit.
+ */
+export function sameActions(a, b) {
+  if ((a ?? []).length !== (b ?? []).length) return false;
+  const left = (a ?? []).map(signature).sort();
+  const right = (b ?? []).map(signature).sort();
+  return left.every((s, i) => s === right[i]);
+}
 
 const countByType = (events) => {
   const out = {};

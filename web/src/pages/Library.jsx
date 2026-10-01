@@ -36,6 +36,9 @@ function TaskRow({ v, onOpen, onDelete }) {
   // A project with no events is not "0% reviewed" — there is nothing to review
   // yet. Treat it as untouched everywhere it shows up.
   const p = v.project?.eventCount ? v.project : null;
+  // Who signed this clip off, if anyone. The server clears it whenever the
+  // actions change, so its presence means "signed off and untouched since".
+  const reviewed = p?.reviewed ?? null;
 
   const mix = p?.byType
     ? EVENT_LABELS.map((l) => ({ l, n: p.byType[l] ?? 0 })).filter((x) => x.n > 0)
@@ -53,7 +56,7 @@ function TaskRow({ v, onOpen, onDelete }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(v, 'annotate'); }
       }}
-      className="group grid w-full cursor-pointer grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_140px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
+      className="group grid w-full cursor-pointer grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_164px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
     >
       <Icon size={15} className={`shrink-0 ${s.tone}`} title={s.label} />
 
@@ -110,17 +113,23 @@ function TaskRow({ v, onOpen, onDelete }) {
           disabled={!p}
           onClick={(e) => { e.stopPropagation(); onOpen(v, 'review'); }}
           title={
-            p
-              ? `Review the ${p.eventCount} action${p.eventCount === 1 ? '' : 's'} already labeled — your changes are recorded`
-              : 'Nothing to review yet: this clip has no labels'
+            reviewed
+              ? `Reviewed${reviewed.by ? ` by ${reviewed.by}` : ''}`
+                + `${reviewed.at ? ` ${relativeTime(reviewed.at)}` : ''} — open to review it again`
+              : p
+                ? `Review the ${p.eventCount} action${p.eventCount === 1 ? '' : 's'} already labeled — your changes are recorded`
+                : 'Nothing to review yet: this clip has no labels'
           }
-          className={`rounded-md border px-2 py-1 text-2xs font-semibold transition ${
-            p
-              ? 'border-amber-500/40 bg-amber-500/[0.10] text-amber-400 hover:bg-amber-500/20'
-              : 'cursor-not-allowed border-white/[0.06] text-ink-700'
+          className={`flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-2xs font-semibold transition ${
+            reviewed
+              ? 'border-pitch-500/40 bg-pitch-500/[0.10] text-pitch-400 hover:bg-pitch-500/20'
+              : p
+                ? 'border-amber-500/40 bg-amber-500/[0.10] text-amber-400 hover:bg-amber-500/20'
+                : 'cursor-not-allowed border-white/[0.06] text-ink-700'
           }`}
         >
-          Review
+          {reviewed && <CheckCircle2 size={10} />}
+          {reviewed ? 'Reviewed' : 'Review'}
         </button>
         <button
           type="button"
@@ -352,8 +361,8 @@ export default function Library() {
               clip name — the only column whose content cannot be guessed — to
               nothing, and rather than clipping the buttons off the right. */}
           <div className="overflow-x-auto">
-            <div className="min-w-[860px]">
-            <div className="grid grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_140px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
+            <div className="min-w-[888px]">
+            <div className="grid grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_164px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
               <span />
               <span>Clip</span>
               <span>Assigned to</span>
