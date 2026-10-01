@@ -142,7 +142,6 @@ access to every clip, so run this only on a network you trust.
 | **Annotate** | the workspace: player, lane timeline, inspector |
 | **Events guide** | the 15 labels and what each one means |
 | **Reference** | worked examples — a clip beside its ground truth, read-only, to learn the conventions |
-| **Review** | go through annotated clips and approve or flag them |
 | **Users & assignments** | label who owns which clip |
 | **Settings** | nudge step, seek step, page size |
 
@@ -349,19 +348,18 @@ tag is repaired rather than dropping the action. Both `{"groundtruth": [...]}`
 and a bare array are accepted.
 
 **Everything about a clip is in that one file.** Alongside `groundtruth` it may
-carry two more keys, both optional:
+carry one more key, optional:
 
 ```json
 {
   "annotator": "Dmytro",
-  "review": {"verdict": "flagged", "reason": "mistimed", "note": "…", "reviewer": "local", "at": "…"},
   "groundtruth": [ … ]
 }
 ```
 
 That is what makes reviewing someone else's work a copy: **drop their
 `<clip name>.json` anywhere under `groundtruth/`, put the clip in `video/`,
-and open it** — their actions, their name and any verdict come with the file.
+and open it** — their actions and their name come with the file.
 There is nothing to import and no second folder to keep in step. Anything else
 already in the file that this tool does not recognise is preserved on save, so
 a field another tool added is never dropped.

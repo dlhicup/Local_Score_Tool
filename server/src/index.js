@@ -12,7 +12,6 @@ import { withUser } from './middleware/auth.js';
 import projectRoutes from './routes/projects.js';
 import videoRoutes from './routes/videos.js';
 import examRoutes from './routes/exam.js';
-import reviewRoutes from './routes/review.js';
 import { VIDEO_DIR } from './services/store.js';
 import { GT_DIR } from './services/gtfile.js';
 
@@ -66,7 +65,6 @@ app.use('/api', metaRoutes);
 app.use('/api', projectRoutes);
 app.use('/api', videoRoutes);
 app.use('/api', examRoutes);
-app.use('/api', reviewRoutes);
 
 // The built frontend. Hashed assets never change under the same name, so the
 // browser may keep them forever; index.html must revalidate so a new build is

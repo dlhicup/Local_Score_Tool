@@ -9,15 +9,8 @@ import Settings from './pages/Settings';
 import Users from './pages/Users';
 import EventsGuide from './pages/EventsGuide';
 import Exam from './pages/Exam';
-import Reviewer from './pages/Reviewer';
 import { useStore } from './store/useStore';
 import { isManager } from './lib/roles';
-
-/** Admin-only pages redirect rather than 404, so a shared link is harmless. */
-function AdminOnly({ children }) {
-  const role = useStore((s) => s.user?.role);
-  return role === 'admin' ? children : <Navigate to="/" replace />;
-}
 
 /** User management: full admins only, not review admins. */
 function ManagerOnly({ children }) {
@@ -64,7 +57,6 @@ export default function App() {
             <Route path="/users" element={<ManagerOnly><Users /></ManagerOnly>} />
             <Route path="/guide" element={<EventsGuide />} />
             <Route path="/reference" element={<Exam />} />
-            <Route path="/review" element={<AdminOnly><Reviewer /></AdminOnly>} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

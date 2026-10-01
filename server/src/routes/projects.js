@@ -88,12 +88,6 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
       events,
       meta: { ...existing.meta, ...(incoming.meta ?? {}) },
     };
-    // Re-saving a flagged clip means the annotator has addressed it — clear the
-    // review so it leaves their "needs fix" list and returns to the reviewer's
-    // queue as unreviewed. (Clients never set meta.review; only /review does.)
-    if (existing.meta?.review && !incoming.meta?.review) {
-      project.meta = { ...project.meta, review: null };
-    }
 
     const { project: stored, written } = await writeProject(project);
 

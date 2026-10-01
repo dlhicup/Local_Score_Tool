@@ -1,6 +1,6 @@
 /**
  * Review admins: accounts promoted to admin so they can see and open every
- * clip for review, but who should NOT manage users or change passwords.
+ * clip, but who should NOT manage users or change passwords.
  *
  * The platform's real roles are only 'admin' and 'annotator', and a full admin
  * can reach every admin surface. Hiding the manager tools from these accounts
