@@ -8,6 +8,7 @@ import VideoStage from '../components/VideoStage';
 import Timeline from '../components/Timeline';
 import Inspector from '../components/Inspector';
 import KeyGuide from '../components/KeyGuide';
+import ReviewChanges from '../components/ReviewChanges';
 import Shortcuts from '../components/Shortcuts';
 import ActionMenu from '../components/ActionMenu';
 import ConfirmDelete from '../components/ConfirmDelete';
@@ -38,8 +39,17 @@ const TIMELINE_VISIBLE_LANES = 6;
 const TIMELINE_MIN = 130;
 const TIMELINE_MAX_SHARE = '40%';
 
-export default function Review() {
+/**
+ * The annotating workspace, in one of two modes.
+ *
+ * `review` opens somebody else's finished clip to be corrected, and keeps a
+ * record of the correction: what was added, removed, retimed or re-tagged,
+ * written into the clip's own file on save. `annotate` is the same workspace
+ * with no record kept.
+ */
+export default function Review({ mode = 'annotate' }) {
   const { id } = useParams();
+  const reviewing = mode === 'review';
   const opening = useRef(null);
   const navigate = useNavigate();
   const {
@@ -47,7 +57,7 @@ export default function Review() {
     selectedId, selectedIds, select, clearSelection, addEvent, deleteEvent, deleteSelection, nudge, undo, redo,
     saveProject, dirty, setPlaying, playing, setPlaybackRate, toast, setTag, ballPick, setBallPick,
     past, future, loadingProject, settings, keyMap, setHeaderDelete,
-    deleteCurrentProject,
+    deleteCurrentProject, setReviewing,
   } = useStore();
 
   const step = settings.nudgeStep || frameStep(DEFAULT_FPS);
@@ -96,13 +106,22 @@ export default function Review() {
     if (project && project.id === id) return;
     if (opening.current === id) return; // one fetch per id, StrictMode included
     opening.current = id;
-    openProject(id).then((p) => {
+    openProject(id, { reviewing }).then((p) => {
       // The server resolves any id that names a real clip, so a failure here
       // means the URL points at nothing — go back to the queue rather than
       // leave an empty workspace sitting on a broken link.
       if (!p) navigate('/', { replace: true });
     });
-  }, [id, project, openProject, deleting, navigate]);
+  }, [id, project, openProject, deleting, navigate, reviewing]);
+
+  /**
+   * Switching between annotating and reviewing the same clip does not reload
+   * it — the clip is already open, so only the mode changes, and with it the
+   * baseline the review is measured against.
+   */
+  useEffect(() => {
+    if (project && project.id === id) setReviewing(reviewing);
+  }, [id, project, reviewing, setReviewing]);
 
   const duration = project?.video?.duration ?? 0;
 
@@ -319,10 +338,11 @@ export default function Review() {
             selected. Collapsing the reference gives the width back. */}
         <aside
           className={`shrink-0 overflow-y-auto transition-[width] duration-150 ${
-            selectedId || keysOpen ? 'w-[340px]' : 'w-9'
+            selectedId || keysOpen || reviewing ? 'w-[340px]' : 'w-9'
           }`}
         >
           <div className="space-y-3">
+            {reviewing && <ReviewChanges />}
             {selectedId && <Inspector />}
             <KeyGuide open={keysOpen} onToggle={() => setKeysOpen((v) => !v)} />
           </div>

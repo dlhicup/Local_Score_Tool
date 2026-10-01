@@ -47,6 +47,7 @@ export default function AppShell({ children }) {
   const location = useLocation();
   const project = useStore((s) => s.project);
   const dirty = useStore((s) => s.dirty);
+  const reviewing = useStore((s) => s.reviewing);
   const events = useStore((s) => s.events);
   const save = useStore((s) => s.saveProject);
   const user = useStore((s) => s.user);
@@ -92,6 +93,16 @@ export default function AppShell({ children }) {
                 <span className="hidden truncate font-mono text-xs text-ink-500 sm:block">
                   {project.video?.filename ?? 'no video attached'}
                 </span>
+                {/* Reviewing writes a record of the edit, so it should never be
+                    possible to be in that mode without noticing. */}
+                {reviewing && (
+                  <span
+                    title="Changes you make here are recorded in the clip's file"
+                    className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/[0.12] px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-amber-400"
+                  >
+                    Reviewing
+                  </span>
+                )}
               </div>
 
               <div className="flex-1" />
@@ -159,7 +170,9 @@ export default function AppShell({ children }) {
                     ? `${noBall.length} action${noBall.length === 1 ? '' : 's'} still need a ball position or `
                       + 'to be marked not visible. Click to jump to the first.'
                     : dirty
-                      ? 'Save this clip’s ground truth'
+                      ? reviewing
+                        ? 'Save the clip and record what this review changed'
+                        : 'Save this clip’s ground truth'
                       : 'Write the ground-truth file again'
                 }
                 className={
@@ -171,7 +184,11 @@ export default function AppShell({ children }) {
                 }
               >
                 {noBall.length ? <AlertTriangle size={15} /> : <Save size={15} />}
-                {noBall.length ? `${noBall.length} need ball` : dirty ? 'Save' : 'Saved'}
+                {noBall.length
+                  ? `${noBall.length} need ball`
+                  : dirty
+                    ? reviewing ? 'Save review' : 'Save'
+                    : 'Saved'}
               </button>
             </>
           ) : (

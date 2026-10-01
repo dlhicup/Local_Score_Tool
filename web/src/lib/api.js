@@ -73,7 +73,11 @@ export const api = {
   listProjects: () => request('/projects'),
   createProject: (payload) => request('/projects', { method: 'POST', body: payload }),
   getProject: (id) => request(`/projects/${id}`),
-  saveProject: (id, project) => request(`/projects/${id}`, { method: 'PUT', body: { project } }),
+  // `review`, on a save made from the review page, says what the review
+  // changed so the server can record it on the clip. Omitted otherwise, which
+  // is what tells the server this was ordinary annotating.
+  saveProject: (id, project, review = null) =>
+    request(`/projects/${id}`, { method: 'PUT', body: review ? { project, review } : { project } }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   exportUrl: (id, onlyAccepted) => `${BASE}/projects/${id}/export${onlyAccepted ? '?accepted=1' : ''}`,
 

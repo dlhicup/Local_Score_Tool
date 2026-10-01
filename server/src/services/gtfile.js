@@ -280,6 +280,21 @@ function rowFor(e) {
 export const ballAnswered = (e) => e?.ball_xy !== undefined;
 
 /**
+ * A non-action key's value, formatted for the file.
+ *
+ * A list gets one entry per line, for the same reason the actions do: letting
+ * JSON.stringify indent a 50-entry review log puts every field of every entry
+ * on its own line and buries the actions under hundreds of lines of history.
+ */
+function encodeExtra(value) {
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]';
+    return `[\n${value.map((x) => '    ' + JSON.stringify(x)).join(',\n')}\n  ]`;
+  }
+  return JSON.stringify(value, null, 2).split('\n').join('\n  ');
+}
+
+/**
  * Write a clip's ground truth: one row per line, frame order, ties keeping the
  * order they were added in. Dense enough to read in a terminal, still one
  * valid JSON document.
@@ -307,7 +322,7 @@ export async function writeEvents(videoName, events, extraKeys = {}) {
 
   const body = hasExtra
     ? `{\n${Object.entries(extraKeys)
-        .map(([k, v]) => `  ${JSON.stringify(k)}: ${JSON.stringify(v, null, 2).split('\n').join('\n  ')}`)
+        .map(([k, v]) => `  ${JSON.stringify(k)}: ${encodeExtra(v)}`)
         .join(',\n')},\n  "groundtruth": ${list}\n}\n`
     : `{"groundtruth":${list}}\n`;
 

@@ -8,6 +8,7 @@ import {
   findGroundTruth, groundTruthIndex, toFrame, GT_DIR,
 } from './gtfile.js';
 import { probeVideo } from './media.js';
+import { REVIEW_LOG_MAX } from './reviewlog.js';
 import { sweepTempFiles } from './atomic.js';
 
 /**
@@ -160,6 +161,9 @@ export async function projectForClip(filename) {
       ...times,
       review: extra.review ?? null,
       annotator: typeof extra.annotator === 'string' ? extra.annotator : null,
+      // What past reviews changed, oldest first. Read-only to the client; the
+      // server is the only thing that appends to it.
+      reviews: Array.isArray(extra.reviews) ? extra.reviews.filter((x) => x && typeof x === 'object') : [],
     },
   };
 }
@@ -230,8 +234,12 @@ export async function readProject(id) {
  * Write a clip's file: the actions, plus the few non-action keys the studio
  * keeps beside them. Anything already in the file that we do not understand is
  * read back and preserved, so a field another tool added is never dropped.
+ *
+ * `appendReview` adds one line to the clip's review log — see reviewlog.js.
+ * The log is capped, oldest first, so a clip that is reviewed every week does
+ * not end up with more history above its actions than actions.
  */
-export async function writeProject(project) {
+export async function writeProject(project, { appendReview = null } = {}) {
   const filename = project?.video?.filename;
   if (!filename) throw Object.assign(new Error('Project has no clip'), { status: 400 });
 
@@ -246,6 +254,11 @@ export async function writeProject(project) {
   if (annotator !== undefined) {
     if (!annotator) delete extra.annotator;
     else extra.annotator = annotator;
+  }
+
+  if (appendReview) {
+    const log = Array.isArray(existing.reviews) ? existing.reviews.filter((x) => x && typeof x === 'object') : [];
+    extra.reviews = [...log, appendReview].slice(-REVIEW_LOG_MAX);
   }
 
   const written = await writeEvents(filename, project.events ?? [], extra);

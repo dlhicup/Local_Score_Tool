@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api, getToken, setToken, setUnauthorizedHandler } from '../lib/api';
 import { EVENT_LABELS, LABEL_META, EVENT_TAG_DEFAULTS, missingBall } from '../lib/labels';
+import { reviewDiff, tallyTotal } from '../lib/review';
 import { saveVideo, loadVideo } from '../lib/db';
 
 const SETTINGS_KEY = 'scoregt.settings';
@@ -136,20 +137,44 @@ export const useStore = create((set, get) => ({
   dirty: false,
   loadingProject: false,
 
-  openProject: async (id) => {
+  /**
+   * Reviewing is the same workspace with a record kept: the clip opens exactly
+   * as it does for annotating, and what the reviewer changes is measured
+   * against `reviewBaseline` — the events as the file held them — and written
+   * into the clip's own file on save.
+   */
+  reviewing: false,
+  reviewBaseline: [],
+
+  /**
+   * Switch an already-open clip between annotating and reviewing. Entering
+   * review takes the baseline from what is on screen; leaving it drops it, so
+   * ordinary annotating never records anything.
+   */
+  setReviewing: (v) =>
+    set((s) =>
+      s.reviewing === Boolean(v)
+        ? {}
+        : { reviewing: Boolean(v), reviewBaseline: v ? s.events : [] },
+    ),
+
+  openProject: async (id, { reviewing = false } = {}) => {
     set({ loadingProject: true });
     try {
       const { project, saved } = await api.getProject(id);
+      const loaded = sortEvents(project.events ?? []);
       set({
         project,
         saved: Boolean(saved),
-        events: sortEvents(project.events ?? []),
+        events: loaded,
         dirty: false,
         past: [],
         future: [],
         selectedId: null,
         selectedIds: [],
         loadingProject: false,
+        reviewing,
+        reviewBaseline: reviewing ? loaded : [],
       });
       // Prefer the clip served from the video folder — it needs no re-picking
       // and survives a different browser. Fall back to the IndexedDB copy for
@@ -171,7 +196,7 @@ export const useStore = create((set, get) => ({
   },
 
   saveProject: async ({ silent = false } = {}) => {
-    const { project, events } = get();
+    const { project, events, reviewing, reviewBaseline } = get();
     if (!project) return;
 
     /**
@@ -195,14 +220,46 @@ export const useStore = create((set, get) => ({
       throw err;
     }
 
+    /**
+     * Worked out before the write, not after: the diff matches events by id,
+     * those ids belong to this browser, and the save replaces every event with
+     * one freshly read from the file. Nothing is sent when the reviewer has not
+     * changed anything, which is what keeps a no-op review out of the log.
+     */
+    const diff = reviewing ? reviewDiff(reviewBaseline, events) : null;
+
     try {
-      const res = await api.saveProject(project.id, { ...project, events });
+      const res = await api.saveProject(
+        project.id,
+        { ...project, events },
+        diff && diff.touched
+          ? { added: diff.added, removed: diff.removed, retimed: diff.retimed, retagged: diff.retagged }
+          : null,
+      );
       const stored = res.project;
-      set({ project: stored, events: sortEvents(stored.events), dirty: false, saved: Boolean(res.saved) });
+      const written = sortEvents(stored.events);
+      set({
+        project: stored,
+        events: written,
+        dirty: false,
+        saved: Boolean(res.saved),
+        // The file as just written is the new baseline, so a second save in the
+        // same sitting records only what changed since the first.
+        reviewBaseline: reviewing ? written : [],
+      });
       if (!silent) {
         const f = res.groundTruthFile;
+        const logged = res.review
+          ? [
+              res.review.added ? `+${tallyTotal(res.review.added)}` : null,
+              res.review.removed ? `-${tallyTotal(res.review.removed)}` : null,
+              res.review.retimed ? `${res.review.retimed} retimed` : null,
+              res.review.retagged ? `${res.review.retagged} retagged` : null,
+            ].filter(Boolean).join(' · ')
+          : '';
         get().toast(
-          f ? `Saved ${f.count} actions to ${f.path.split(/[\\/]/).pop()}` : 'Ground truth saved',
+          (f ? `Saved ${f.count} actions to ${f.path.split(/[\\/]/).pop()}` : 'Ground truth saved')
+            + (logged ? ` — review logged: ${logged}` : ''),
           'success',
         );
       }

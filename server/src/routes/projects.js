@@ -5,6 +5,7 @@ import {
 import { summarise } from '../services/merge.js';
 import { sanitiseEvent, ballAnswered, groundTruthExists, toFrame, REPORTING_FPS } from '../services/gtfile.js';
 import { getAssignments } from '../services/users.js';
+import { reviewEntry } from '../services/reviewlog.js';
 import { requireAuth } from '../middleware/auth.js';
 import { EVENT_LABELS } from '../labels.js';
 
@@ -89,13 +90,29 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
       meta: { ...existing.meta, ...(incoming.meta ?? {}) },
     };
 
-    const { project: stored, written } = await writeProject(project);
+    /**
+     * A save made from the review page records what the review changed. The
+     * counts are taken here rather than trusted from the request: `before` is
+     * the file this write is about to replace, `after` is what replaces it.
+     * Nothing is appended when the reviewer changed nothing.
+     */
+    const entry = req.body?.review
+      ? reviewEntry({
+          before: existing.events,
+          after: events,
+          claim: req.body.review,
+          by: req.user?.username ?? null,
+        })
+      : null;
+
+    const { project: stored, written } = await writeProject(project, { appendReview: entry });
 
     res.json({
       project: stored,
       summary: summarise(stored.events),
       groundTruthFile: written ? { path: written.path, count: written.count } : null,
       saved: Boolean(written),
+      review: entry,
     });
   } catch (err) {
     next(err);

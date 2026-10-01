@@ -51,8 +51,9 @@ export default function App() {
         >
           <Routes location={location}>
             <Route path="/" element={<Library />} />
-            <Route path="/p/:id/annotate" element={<Review />} />
-            <Route path="/p/:id/review" element={<Navigate to="../annotate" replace />} />
+            <Route path="/p/:id/annotate" element={<Review mode="annotate" />} />
+            {/* Same workspace, with a record kept of what the reviewer changes. */}
+            <Route path="/p/:id/review" element={<Review mode="review" />} />
             <Route path="/p/:id/extract" element={<Navigate to="../annotate" replace />} />
             <Route path="/users" element={<ManagerOnly><Users /></ManagerOnly>} />
             <Route path="/guide" element={<EventsGuide />} />

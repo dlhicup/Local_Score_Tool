@@ -139,7 +139,7 @@ access to every clip, so run this only on a network you trust.
 | page | what it's for |
 | --- | --- |
 | **Library** | every clip, its status, and how much is annotated. Open one to start. Drag files in to import them. |
-| **Annotate** | the workspace: player, lane timeline, inspector |
+| **Annotate** | the workspace: player, lane timeline, inspector. Opened in review mode it also records what you change |
 | **Events guide** | the 15 labels and what each one means |
 | **Reference** | worked examples — a clip beside its ground truth, read-only, to learn the conventions |
 | **Users & assignments** | label who owns which clip |
@@ -166,6 +166,26 @@ The badge beside the action count in the header watches two things for you: the
 share of actions still tagged `unknown` (the spec asks for under 30%), and the
 consistency rules — a reception that changed team, an interception that didn't,
 an aerial duel whose two halves agree. Click a warning to jump to it.
+
+### Reviewing someone else's clip
+
+Every row in the Library has two buttons. **Annotate** opens the clip to label
+it. **Review** opens the same workspace to correct a clip that has already been
+labeled — it is disabled until there is something to correct.
+
+The difference is that a review is recorded. While you work, a panel beside the
+picture counts what you have changed: actions added, actions removed, surviving
+actions moved to a different frame, and surviving actions whose tags you
+changed. Saving writes those counts into the clip's own file, under `reviews`,
+and resets the count — so a second save records only what changed after the
+first. A review that changed nothing records nothing.
+
+Changing an action's label counts as one removed and one added, because that is
+what it is in label-count terms: the file ends up with one fewer of the old
+label and one more of the new one.
+
+The header shows a **Reviewing** badge whenever you are in that mode, so it is
+never possible to be recording without knowing.
 
 ### Keyboard
 
@@ -348,14 +368,26 @@ tag is repaired rather than dropping the action. Both `{"groundtruth": [...]}`
 and a bare array are accepted.
 
 **Everything about a clip is in that one file.** Alongside `groundtruth` it may
-carry one more key, optional:
+carry two more keys, both optional:
 
 ```json
 {
   "annotator": "Dmytro",
+  "reviews": [
+    {"at":"2026-10-01T06:23:20.244Z","by":"ana","before":181,"after":183,"added":{"pass":3},"removed":{"tackle":1},"retimed":4,"retagged":7}
+  ],
   "groundtruth": [ … ]
 }
 ```
+
+`reviews` is the clip's review history, oldest first, one line per review that
+changed something — written by the **Review** button, never by hand. `before`
+and `after` are total action counts; `added` and `removed` are per label, and
+for every label `before + added - removed` equals `after`. `retimed` and
+`retagged` count actions that survived the review but moved frame or changed a
+tag. A `"derived": true` entry means the reviewer's own account of the edit did
+not add up and the counts were taken from the two files instead. The last 50
+entries are kept.
 
 That is what makes reviewing someone else's work a copy: **drop their
 `<clip name>.json` anywhere under `groundtruth/`, put the clip in `video/`,

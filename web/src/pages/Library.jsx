@@ -43,12 +43,17 @@ function TaskRow({ v, onOpen, onDelete }) {
   const total = mix.reduce((sum, x) => sum + x.n, 0) || 1;
 
   return (
-    <motion.button
+    <motion.div
       layout="position"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      onClick={() => onOpen(v)}
-      className="group grid w-full grid-cols-[20px_minmax(0,1fr)_110px_84px_92px_136px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(v, 'annotate')}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(v, 'annotate'); }
+      }}
+      className="group grid w-full cursor-pointer grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_140px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
     >
       <Icon size={15} className={`shrink-0 ${s.tone}`} title={s.label} />
 
@@ -96,6 +101,37 @@ function TaskRow({ v, onOpen, onDelete }) {
         ))}
       </span>
 
+      {/* Two ways in. Review is for correcting a clip somebody has already
+          labeled, and records what it changed, so there is nothing for it to do
+          until there are labels — it stays disabled and says why. */}
+      <span className="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          disabled={!p}
+          onClick={(e) => { e.stopPropagation(); onOpen(v, 'review'); }}
+          title={
+            p
+              ? `Review the ${p.eventCount} action${p.eventCount === 1 ? '' : 's'} already labeled — your changes are recorded`
+              : 'Nothing to review yet: this clip has no labels'
+          }
+          className={`rounded-md border px-2 py-1 text-2xs font-semibold transition ${
+            p
+              ? 'border-amber-500/40 bg-amber-500/[0.10] text-amber-400 hover:bg-amber-500/20'
+              : 'cursor-not-allowed border-white/[0.06] text-ink-700'
+          }`}
+        >
+          Review
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpen(v, 'annotate'); }}
+          title={p ? 'Open for annotating' : 'Start labelling this clip'}
+          className="rounded-md border border-pitch-500/40 bg-pitch-500/[0.10] px-2 py-1 text-2xs font-semibold text-pitch-400 transition hover:bg-pitch-500/20"
+        >
+          Annotate
+        </button>
+      </span>
+
       <span className="relative flex items-center justify-end">
         <ArrowRight size={14} className="text-ink-700 transition group-hover:opacity-0" />
         <span
@@ -108,7 +144,7 @@ function TaskRow({ v, onOpen, onDelete }) {
           <Trash2 size={14} />
         </span>
       </span>
-    </motion.button>
+    </motion.div>
   );
 }
 
@@ -196,11 +232,16 @@ export default function Library() {
     });
   }, [data, query, status]);
 
-  const open = async (v) => {
+  /**
+   * `review` opens the same workspace with a record kept of what gets changed;
+   * `annotate` opens it with none. Clicking the row itself annotates, which is
+   * what it has always done.
+   */
+  const open = async (v, mode = 'annotate') => {
     setOpening(v.name);
     try {
       const project = await openTask(v.name);
-      navigate(`/p/${project.id}/annotate`);
+      navigate(`/p/${project.id}/${mode === 'review' ? 'review' : 'annotate'}`);
     } catch (err) {
       toast(err.message, 'error');
       setOpening(null);
@@ -306,34 +347,43 @@ export default function Library() {
             </div>
           </div>
 
-          <div className="grid grid-cols-[20px_minmax(0,1fr)_110px_84px_92px_136px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
-            <span />
-            <span>Clip</span>
-            <span>Assigned to</span>
-            <span className="text-right">Size</span>
-            <span className="text-right">Actions</span>
-            <span>Label mix</span>
-            <span />
-          </div>
+          {/* One horizontal scroller around the head and the rows together, so
+              a narrow window scrolls them in step rather than collapsing the
+              clip name — the only column whose content cannot be guessed — to
+              nothing, and rather than clipping the buttons off the right. */}
+          <div className="overflow-x-auto">
+            <div className="min-w-[860px]">
+            <div className="grid grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_140px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
+              <span />
+              <span>Clip</span>
+              <span>Assigned to</span>
+              <span className="text-right">Size</span>
+              <span className="text-right">Actions</span>
+              <span>Label mix</span>
+              <span className="text-right">Open</span>
+              <span />
+            </div>
 
-          <div className="max-h-[52vh] overflow-y-auto p-1.5">
-            {loading ? (
-              <div className="space-y-1.5 p-1.5">
-                {Array.from({ length: 8 }, (_, i) => (
-                  <div key={i} className="skeleton h-10 rounded-lg" />
-                ))}
-              </div>
-            ) : visible.length === 0 ? (
-              <div className="flex flex-col items-center px-6 py-14 text-center">
-                <Film size={24} className="mb-3 text-ink-600" />
-                <p className="text-xs font-medium text-ink-300">
-                  {data?.videos?.length ? 'No clip matches' : 'No videos found'}
-                </p>
-                <p className="mt-1 font-mono text-2xs text-ink-600">{data?.dir}</p>
-              </div>
-            ) : (
-              pageItems.map((v) => <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} />)
-            )}
+            <div className="max-h-[52vh] overflow-y-auto p-1.5">
+              {loading ? (
+                <div className="space-y-1.5 p-1.5">
+                  {Array.from({ length: 8 }, (_, i) => (
+                    <div key={i} className="skeleton h-10 rounded-lg" />
+                  ))}
+                </div>
+              ) : visible.length === 0 ? (
+                <div className="flex flex-col items-center px-6 py-14 text-center">
+                  <Film size={24} className="mb-3 text-ink-600" />
+                  <p className="text-xs font-medium text-ink-300">
+                    {data?.videos?.length ? 'No clip matches' : 'No videos found'}
+                  </p>
+                  <p className="mt-1 font-mono text-2xs text-ink-600">{data?.dir}</p>
+                </div>
+              ) : (
+                pageItems.map((v) => <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} />)
+              )}
+            </div>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] px-3 py-2 text-2xs text-ink-500">
