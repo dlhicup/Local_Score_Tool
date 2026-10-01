@@ -19,6 +19,10 @@ import { getVideoEl } from '../lib/videoRef';
 
 const NEAR = 0.6; // seconds either side of the playhead counted as "now"
 
+// Whether the key reference is open is a property of the browser, not of a
+// clip or an account, so it lives in localStorage.
+const KEYGUIDE_KEY = 'scoregt.keyguide';
+
 // Timeline geometry, mirrored from Timeline.jsx so the workspace can give the
 // strip exactly the height its lanes need. Keep in step with LANE_H/RULER_H.
 const LANE_H = 24;
@@ -69,10 +73,10 @@ export default function Review() {
   // The key reference beside the picture. Remembered per browser: an annotator
   // who knows the fifteen keys should not have to close it every session.
   const [keysOpen, setKeysOpen] = useState(() => {
-    try { return localStorage.getItem(scoregt.keyguide) !== closed; } catch { return true; }
+    try { return localStorage.getItem(KEYGUIDE_KEY) !== 'closed'; } catch { return true; }
   });
   useEffect(() => {
-    try { localStorage.setItem(scoregt.keyguide, keysOpen ? open : closed); } catch { /* storage blocked */ }
+    try { localStorage.setItem(KEYGUIDE_KEY, keysOpen ? 'open' : 'closed'); } catch { /* storage blocked */ }
   }, [keysOpen]);
   const [menu, setMenu] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
