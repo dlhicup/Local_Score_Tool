@@ -1,5 +1,7 @@
-import { BookOpen } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookOpen, FileText } from 'lucide-react';
 import { EVENT_LABELS, LABEL_META, LABEL_GROUPS, LABEL_DEFINITIONS, labelTitle } from '../lib/labels';
+import { api } from '../lib/api';
 
 /**
  * A reference document for annotators: the 15 event types, what each means, and
@@ -28,6 +30,28 @@ const TEAM_RULES = [
 ];
 
 export default function EventsGuide() {
+  /**
+   * The definitions come from the server, which reads them out of guide.md —
+   * the file that calls itself the source of truth for action names. Keeping a
+   * second copy in the app is what let this page drift away from it. The
+   * built-in wording is only the fallback for a server that cannot be reached.
+   */
+  const [defs, setDefs] = useState(LABEL_DEFINITIONS);
+  const [notes, setNotes] = useState([]);
+  const [source, setSource] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.labels()
+      .then((d) => {
+        if (!live) return;
+        if (d?.definitions) setDefs({ ...LABEL_DEFINITIONS, ...d.definitions });
+        setNotes(Array.isArray(d?.notes) ? d.notes : []);
+        setSource(d?.definitionsFrom ?? null);
+      })
+      .catch(() => { /* keep the built-in wording */ });
+    return () => { live = false; };
+  }, []);
+
   const byGroup = LABEL_GROUPS.map((g) => ({
     group: g,
     labels: EVENT_LABELS.filter((l) => LABEL_META[l].group === g),
@@ -47,6 +71,25 @@ export default function EventsGuide() {
           hundredth of a second on a fixed 25 fps clock.
         </p>
 
+        {/* Where the wording below comes from, and anything the file says
+            outside its table. Shown so a reader can tell at a glance whether
+            the page is quoting the spec or falling back to built-in wording. */}
+        {(source || notes.length > 0) && (
+          <div className="mt-3 max-w-[62ch] rounded-lg border border-white/[0.06] bg-ink-800/60 px-3 py-2">
+            {source && (
+              <p className="flex items-center gap-1.5 font-mono text-2xs text-ink-500">
+                <FileText size={11} />
+                definitions read from {source.split(/[\\/]/).pop()}
+              </p>
+            )}
+            {notes.map((n) => (
+              <p key={n} className="mt-1 text-2xs leading-snug text-ink-400">
+                {n.replace(/`/g, '')}
+              </p>
+            ))}
+          </div>
+        )}
+
         <div className="mt-8 space-y-8">
           {byGroup.map(({ group, labels }) => (
             <section key={group}>
@@ -60,7 +103,7 @@ export default function EventsGuide() {
                         <h3 className="text-sm font-semibold text-ink-100">{labelTitle(l)}</h3>
                         <code className="text-2xs text-ink-600">{l}</code>
                       </div>
-                      <p className="mt-1 text-sm leading-relaxed text-ink-400">{LABEL_DEFINITIONS[l] ?? '—'}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-ink-400">{defs[l] ?? '—'}</p>
                     </div>
                     <kbd className="mt-0.5 shrink-0 rounded border border-white/10 bg-ink-700 px-2 py-1 font-mono text-xs uppercase text-ink-300">{LABEL_META[l].key}</kbd>
                   </div>

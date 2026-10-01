@@ -58,22 +58,44 @@ export const KEY_TO_LABEL = Object.fromEntries(
   EVENT_LABELS.map((l) => [LABEL_META[l].key, l]),
 );
 
+/**
+ * What each action means.
+ *
+ * Generated from guide.md — that file is the source of truth for action names,
+ * and the server reads it at runtime, so this copy is only the fallback for
+ * when it cannot be read. Do not hand-edit: change guide.md instead.
+ */
 export const LABEL_DEFINITIONS = {
-  pass: 'A player deliberately plays the ball toward a team-mate.',
-  pass_received: 'A player brings a team-mate’s pass under control.',
-  recovery: 'A player collects a loose ball with no opponent challenge.',
-  ball_out_of_play: 'The ball fully crosses a touchline or goal line, or play is stopped.',
-  tackle: 'A player dispossesses an opponent through a ground challenge.',
-  interception: 'A player cuts out an opponent’s intended pass.',
-  clearance: 'A defender hits the ball away from danger with no target team-mate.',
-  take_on: 'A player attempts to dribble past a directly opposing player.',
-  substitution: 'A player is replaced during a stoppage.',
-  block: 'A defender blocks a shot or cross with the body.',
-  aerial_duel: 'Two opposing players contest a ball in the air.',
-  shot: 'A deliberate attempt to score.',
-  save: 'The goalkeeper prevents a shot from becoming a goal.',
-  foul: 'An infringement penalised by the referee.',
-  goal: 'The ball fully crosses the goal line between the posts.',
+  pass:
+    'A pass is when a player kicks or throws the ball to one of their teammates.',
+  pass_received:
+    'A Pass Received refers to the successful completion of a pass when a player gains control of the ball after it has been deliberately passed to them by a teammate.',
+  recovery:
+    'A player gains possession after no team has possession of the ball or the ball is directed to them by an opponent. Active attempts to intercept the ball are excluded.',
+  tackle:
+    'A player tries to stop an opposing player from progressing further with the ball or takes possession from an opposing player.',
+  interception:
+    'A player intercepts an opposing team pass between two opposing players.',
+  ball_out_of_play:
+    'The ball goes out of play.',
+  clearance:
+    'A player clears the ball to safety by kick or header and eliminates immediate threat towards his/her own goal, regardless of who gains possession afterwards.',
+  take_on:
+    'Situations in which a player in control of the ball moves past an opponent player. Awarded to the offensive player who performs the take-on.',
+  substitution:
+    'Refers to the event when a player enters the match to replace a teammate. This occurs during a stoppage in play.',
+  block:
+    'A player blocks a shot by an opposing player.',
+  aerial_duel:
+    'An aerial duel occurs when two or more players attempt to gain possession of the ball in the air, typically using their head, for example after a long goal kick or a cross. At least one player must jump or clearly attempt to jump in order to contest the ball in the air. The key criterion is that the players are competing for the same ball, with physical contact or a visible attempt to win the ball. A separate event is recorded for each player involved in the duel.',
+  shot:
+    'A Shot is an attempt made by a player to score a goal by striking or directing the ball towards the opponent\'s goal.',
+  save:
+    'When the goalkeeper stops the ball from entering the net after a shot.',
+  foul:
+    'Occurs when a player breaks the laws of the game through unfair play or actions such as tripping, pushing, or handling the ball, resulting in a free kick or penalty for the opposing team. Excluding offside events and advantages. Referee needs to stop play.',
+  goal:
+    'To be awarded, the ball must pass completely over the goal line in the area between the posts and beneath the crossbar. Always comes with a shot event at the same time.',
 };
 
 // ---------------------------------------------------------------------------
@@ -174,6 +196,19 @@ export function teamChecks(events) {
       out.push({ at: pair[0].timestamp, id: pair[0].id, text: 'the two sides of an aerial_duel should be different teams' });
     }
   }
+
+  // guide.md on `goal`: "Always comes with a shot event at the same time."
+  // A goal standing alone is a missing shot, not a goal that happened without
+  // one — so it is worth flagging rather than assuming.
+  const shotFrames = new Set(sorted.filter((e) => e.type === 'shot').map((e) => Math.round(e.timestamp * 25)));
+  for (const g of sorted.filter((e) => e.type === 'goal')) {
+    const f = Math.round(g.timestamp * 25);
+    // A frame either side, since the two are placed by hand.
+    if (!shotFrames.has(f) && !shotFrames.has(f - 1) && !shotFrames.has(f + 1)) {
+      out.push({ at: g.timestamp, id: g.id, text: 'a goal always comes with a shot on the same frame' });
+    }
+  }
+
   return out;
 }
 
