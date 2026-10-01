@@ -199,6 +199,16 @@ changed tag or a moved frame. The panel warns you while you hold unsaved
 changes, and the button goes back to **Finish review** so you can sign the new
 state off. A save that changes nothing leaves the sign-off alone.
 
+You can also take a mark off by hand, which is what you want when a clip was
+signed off too early or by mistake:
+
+- the **✕** beside **Reviewed** in the Library, which needs no clip opened;
+- **Unmark** beside **Reviewed** in the review panel.
+
+Either way only the mark goes. The actions are not rewritten, and if you are
+holding unsaved edits when you unmark, they stay unsaved — unmarking is not a
+back door to saving them.
+
 ### Keyboard
 
 | key | action |
@@ -394,10 +404,11 @@ carry two more keys, both optional:
 ```
 
 `reviewed` is the sign-off: the clip has been reviewed and nothing has changed
-since. It is written by **Finish review** and deleted again by any save that
-changes the actions, so its presence is a claim about the file as it stands,
-not a record that somebody once looked at it. The Library reads it to show
-**Reviewed** instead of **Review**.
+since. It is written by **Finish review**, deleted again by any save that
+changes the actions, and can be deleted by hand from the Library or the review
+panel. Its presence is a claim about the file as it stands, not a record that
+somebody once looked at it. The Library reads it to show **Reviewed** instead
+of **Review**.
 
 `reviews` is the clip's review history, oldest first, one line per review that
 changed something — written by the **Review** button, never by hand. `before`

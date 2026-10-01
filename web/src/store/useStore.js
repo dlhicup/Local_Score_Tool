@@ -281,6 +281,25 @@ export const useStore = create((set, get) => ({
   finishReview: () => get().saveProject({ finish: true }),
 
   /**
+   * Take the reviewed mark off this clip.
+   *
+   * Only the mark changes: the events in the store are left exactly as they
+   * are, so unsaved edits survive, and nothing of them is written to the file.
+   */
+  clearReviewed: async () => {
+    const { project } = get();
+    if (!project) return;
+    try {
+      await api.clearReviewed(project.id);
+      set((s) => (s.project ? { project: { ...s.project, meta: { ...s.project.meta, reviewed: null } } } : {}));
+      get().toast('Reviewed mark removed', 'success');
+    } catch (err) {
+      get().toast(err.message, 'error');
+      throw err;
+    }
+  },
+
+  /**
    * Throw away this clip's ground truth entirely — the working record and the
    * delivered file. The clip itself is untouched and returns to the queue as
    * unannotated, so the work can simply be redone.

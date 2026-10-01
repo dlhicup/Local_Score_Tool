@@ -55,6 +55,26 @@ router.get('/projects/:id', requireAuth, async (req, res, next) => {
   }
 });
 
+/**
+ * Take a clip's reviewed mark off again.
+ *
+ * Its own route rather than a flag on the save, because clearing the mark is
+ * about the clip's status and not its actions: a reviewer who has unsaved edits
+ * on screen must be able to drop the mark without those edits being written
+ * along with it. The file is rewritten with the actions it already holds.
+ */
+router.delete('/projects/:id/reviewed', requireAuth, async (req, res, next) => {
+  try {
+    const project = await resolveProject(req.params.id);
+    if (!(await mayTouch(req.user, project))) return res.status(403).json({ error: 'This clip is not assigned to you' });
+    if (!project.meta?.reviewed) return res.json({ reviewed: null, changed: false });
+    await writeProject(project, { reviewed: null });
+    res.json({ reviewed: null, changed: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.put('/projects/:id', requireAuth, async (req, res, next) => {
   try {
     const existing = await resolveProject(req.params.id);

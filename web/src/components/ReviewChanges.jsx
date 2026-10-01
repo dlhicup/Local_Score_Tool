@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ClipboardList, Plus, Minus, Move, Tag, CheckCircle2, Loader2 } from 'lucide-react';
+import { ClipboardList, Plus, Minus, Move, Tag, CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { reviewDiff, tallyTotal } from '../lib/review';
 import { LABEL_META, labelTitle } from '../lib/labels';
@@ -57,7 +57,9 @@ export default function ReviewChanges() {
   const priorCount = useStore((s) => s.project?.meta?.reviews?.length ?? 0);
   const reviewed = useStore((s) => s.project?.meta?.reviewed ?? null);
   const finishReview = useStore((s) => s.finishReview);
+  const clearReviewed = useStore((s) => s.clearReviewed);
   const [finishing, setFinishing] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const d = useMemo(() => reviewDiff(baseline, events), [baseline, events]);
 
@@ -73,6 +75,17 @@ export default function ReviewChanges() {
       /* the store has already said why — a missing ball answer, usually */
     } finally {
       setFinishing(false);
+    }
+  };
+
+  const unreview = async () => {
+    setClearing(true);
+    try {
+      await clearReviewed();
+    } catch {
+      /* already reported */
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -111,25 +124,41 @@ export default function ReviewChanges() {
       <div className="mt-3 border-t border-white/[0.06] pt-3">
         {/* Signing off and saving are one request: a sign-off must not be able
             to land without the actions it signs off on. */}
-        <button
-          onClick={finish}
-          disabled={finishing}
-          title={
-            settled
-              ? 'Already signed off. Press to sign off again.'
-              : reviewed
-                ? 'Sign the clip off again, with the changes you have just made'
-                : 'Save the clip and mark it reviewed'
-          }
-          className={
-            settled
-              ? 'flex w-full items-center justify-center gap-1.5 rounded-lg border border-pitch-500/40 bg-pitch-500/[0.10] px-3 py-1.5 text-xs font-semibold text-pitch-400 transition hover:bg-pitch-500/20 disabled:opacity-50'
-              : 'btn-primary w-full justify-center'
-          }
-        >
-          {finishing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-          {finishing ? 'Finishing…' : settled ? 'Reviewed' : 'Finish review'}
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            onClick={finish}
+            disabled={finishing || clearing}
+            title={
+              settled
+                ? 'Already signed off. Press to sign off again.'
+                : reviewed
+                  ? 'Sign the clip off again, with the changes you have just made'
+                  : 'Save the clip and mark it reviewed'
+            }
+            className={
+              settled
+                ? 'flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-pitch-500/40 bg-pitch-500/[0.10] px-3 py-1.5 text-xs font-semibold text-pitch-400 transition hover:bg-pitch-500/20 disabled:opacity-50'
+                : 'btn-primary flex-1 justify-center'
+            }
+          >
+            {finishing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            {finishing ? 'Finishing…' : settled ? 'Reviewed' : 'Finish review'}
+          </button>
+
+          {/* Only offered when there is a mark to take off. Clears the mark and
+              nothing else: any edits on screen are still unsaved afterwards. */}
+          {reviewed && (
+            <button
+              onClick={unreview}
+              disabled={finishing || clearing}
+              title="Take the reviewed mark off this clip. Its actions are not touched."
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-semibold text-ink-400 transition hover:border-avoid-500/40 hover:bg-avoid-500/10 hover:text-avoid-500 disabled:opacity-50"
+            >
+              {clearing ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+              Unmark
+            </button>
+          )}
+          </div>
 
         {reviewed ? (
           <p className="mt-1.5 text-2xs leading-snug text-ink-500">

@@ -76,6 +76,10 @@ export const api = {
   // `review`, on a save made from the review page, says what the review
   // changed so the server can record it on the clip. Omitted otherwise, which
   // is what tells the server this was ordinary annotating.
+  // Drops the reviewed mark on its own, without writing the actions — so a
+  // reviewer holding unsaved edits does not have them saved as a side effect.
+  clearReviewed: (id) => request(`/projects/${encodeURIComponent(id)}/reviewed`, { method: 'DELETE' }),
+
   saveProject: (id, project, review = null, finishReview = false) =>
     request(`/projects/${id}`, {
       method: 'PUT',

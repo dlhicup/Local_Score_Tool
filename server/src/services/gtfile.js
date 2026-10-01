@@ -291,6 +291,14 @@ function encodeExtra(value) {
     if (!value.length) return '[]';
     return `[\n${value.map((x) => '    ' + JSON.stringify(x)).join(',\n')}\n  ]`;
   }
+  // A flat object — the review sign-off, say — on one line too. Spread over
+  // five it is no clearer, and it pushes the actions further down the file.
+  if (
+    value && typeof value === 'object'
+    && Object.values(value).every((v) => v === null || typeof v !== 'object')
+  ) {
+    return JSON.stringify(value);
+  }
   return JSON.stringify(value, null, 2).split('\n').join('\n  ');
 }
 

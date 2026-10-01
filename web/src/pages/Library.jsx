@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search, CheckCircle2, Circle, Film,
-  ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2, Trash2,
+  ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2, Trash2, X,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { api } from '../lib/api';
@@ -30,7 +30,7 @@ function StatTile({ label, value, tone, active, onClick }) {
   );
 }
 
-function TaskRow({ v, onOpen, onDelete }) {
+function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
   const s = STATUS[v.status];
   const Icon = s.icon;
   // A project with no events is not "0% reviewed" — there is nothing to review
@@ -56,7 +56,7 @@ function TaskRow({ v, onOpen, onDelete }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(v, 'annotate'); }
       }}
-      className="group grid w-full cursor-pointer grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_164px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
+      className="group grid w-full cursor-pointer grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_196px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
     >
       <Icon size={15} className={`shrink-0 ${s.tone}`} title={s.label} />
 
@@ -131,6 +131,19 @@ function TaskRow({ v, onOpen, onDelete }) {
           {reviewed && <CheckCircle2 size={10} />}
           {reviewed ? 'Reviewed' : 'Review'}
         </button>
+
+        {/* Taking the mark off without opening the clip: the Library is where
+            the mark is read, so it is where it is most likely to be wrong. */}
+        {reviewed && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onClearReviewed(v); }}
+            title={`Remove the reviewed mark from ${v.name} — its actions are not touched`}
+            className="rounded-md border border-white/[0.07] px-1 py-1 text-ink-600 transition hover:border-avoid-500/40 hover:bg-avoid-500/10 hover:text-avoid-500"
+          >
+            <X size={11} />
+          </button>
+        )}
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onOpen(v, 'annotate'); }}
@@ -194,6 +207,17 @@ export default function Library() {
     try {
       await api.deleteVideo(v.name);
       toast(`Removed ${v.name}`, 'success');
+      await load();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  /** Drop a clip's reviewed mark from the list, without opening it. */
+  const clearReviewed = async (v) => {
+    try {
+      await api.clearReviewed(v.project.id);
+      toast(`Removed the reviewed mark from ${v.name}`, 'success');
       await load();
     } catch (err) {
       toast(err.message, 'error');
@@ -361,8 +385,8 @@ export default function Library() {
               clip name — the only column whose content cannot be guessed — to
               nothing, and rather than clipping the buttons off the right. */}
           <div className="overflow-x-auto">
-            <div className="min-w-[888px]">
-            <div className="grid grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_164px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
+            <div className="min-w-[904px]">
+            <div className="grid grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_196px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
               <span />
               <span>Clip</span>
               <span>Assigned to</span>
@@ -389,7 +413,9 @@ export default function Library() {
                   <p className="mt-1 font-mono text-2xs text-ink-600">{data?.dir}</p>
                 </div>
               ) : (
-                pageItems.map((v) => <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} />)
+                pageItems.map((v) => (
+                    <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} onClearReviewed={clearReviewed} />
+                  ))
               )}
             </div>
             </div>
