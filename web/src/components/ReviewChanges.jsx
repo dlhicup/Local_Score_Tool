@@ -182,12 +182,12 @@ export default function ReviewChanges() {
             <span>{priorCount} earlier review{priorCount === 1 ? '' : 's'} on record.</span>
             {clip && (
               <a
-                href={api.reviewLogUrl({ clip, format: 'csv' })}
+                href={api.reviewLogUrl({ clip, format: 'txt' })}
                 download
-                title="Download this clip's review log: every change and the frame it happened on"
+                title="Download this clip's review log, written out in full"
                 className="inline-flex items-center gap-1 font-semibold text-ink-400 underline decoration-dotted transition hover:text-pitch-400"
               >
-                <Download size={10} /> CSV
+                <Download size={10} /> Log
               </a>
             )}
           </p>

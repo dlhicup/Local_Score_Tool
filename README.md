@@ -176,9 +176,22 @@ labeled — it is disabled until there is something to correct.
 The difference is that a review is recorded. While you work, a panel beside the
 picture counts what you have changed: actions added, actions removed, surviving
 actions moved to a different frame, and surviving actions whose tags you
-changed. Saving writes those counts into the clip's own file, under `reviews`,
-and resets the count — so a second save records only what changed after the
-first. A review that changed nothing records nothing.
+changed.
+
+Saving does two separate things. The corrections go into the clip's own
+`groundtruth`, replacing what the annotator had — that is the point of
+reviewing, and it is the corrected version that gets handed off. What the
+review *changed* is written somewhere else entirely: **`Review.<clip>.json`**,
+beside the clip's ground truth. Nothing about the review goes into the
+deliverable.
+
+Saving also resets the count, so a second save records only what changed after
+the first. A review that changed nothing records nothing.
+
+> **The log is a description, not a backup.** No copy of the annotator's
+> original is kept anywhere, so a review cannot be undone — if a reviewer
+> removes an action, the log says which action and at which frame, but the
+> action itself is gone from the ground truth.
 
 Changing an action's label counts as one removed and one added, because that is
 what it is in label-count terms: the file ends up with one fewer of the old
@@ -211,51 +224,74 @@ back door to saving them.
 
 ### Downloading the review log
 
-There are three ways to get it, all in the **Review log** control in the
-Library header:
+Each row in the Library has a **⬇ Log** beside its buttons, which downloads
+that one clip's history as readable text without opening the clip. A clip that
+has never been reviewed says *no log* instead. The review panel has the same
+link for the clip you have open.
+
+For more than one clip at a time, the **Review log** control in the Library
+header:
 
 | | what you get |
 | --- | --- |
-| **per video** | a zip holding **one CSV per video**, named after the clip, plus an `_index.csv` saying what is in the archive and how much each clip was reviewed |
-| **combined** | one CSV covering every clip, for sorting the whole corpus in one sheet |
-| **JSON** | the log exactly as the clip files store it |
+| **per video** | a zip with **one file per video, in both forms** — `text/<clip>.txt` to read and `csv/<clip>.csv` to sort — plus an `_index.csv` saying what is in the archive |
+| **text** | every clip's history as one text file |
+| **CSV** | one spreadsheet covering every clip, for sorting the whole corpus in one sheet |
+| **JSON** | the log as the files store it |
 
-Each row in the Library also has a small **⬇ n** beside its buttons — *n*
-being how many times that clip has been reviewed — which downloads that one
-clip's log without opening it. A clip that has never been reviewed shows a
-dash instead. The review panel has the same link for the clip you have open.
+The text form is the log as it is written: a header per clip, then a block per
+review, then one sentence per change.
 
-Every CSV, whether on its own or inside the zip, is **one row per change**,
-which is what makes it answer *what changed where*:
+```
+Review log — Veo U19 Sl Gw18 Paok-Volos 3-0 Cut
+Annotated by Tillottoma
+1924 actions in the ground truth now
+Signed off by local on 2026-10-06 05:41
+
+----------------------------------------------------------------------
+Review 1 — 2026-10-06 03:57 by local
+1924 actions became 1921: 1 action added, 4 actions removed, 1 action re-tagged.
+
+  - At frame 25 (0:01.00), the pass action's team was updated from Team A to Team B.
+  - At frame 70 (0:02.80), the tackle was removed.
+  - The shot at frame 100 (0:04.00) was moved to frame 102 (0:04.08).
+  - At frame 120 (0:04.80), a goal was added for Team A.
+  - At frame 150 (0:06.00), the action was clearance, but it was updated to block.
+```
+
+The CSV says the same thing, one row per change, with the sentence in a
+`change` column and the rest broken out so a spreadsheet can sort and total it:
 
 | column | what it holds |
 | --- | --- |
-| `clip`, `file`, `annotator` | which clip, which file under `groundtruth/`, whose hand-in |
-| `reviewed_at`, `reviewed_by` | the clip's sign-off, if it has one |
-| `review_at`, `review_by`, `review_index` | which review this row belongs to |
-| `actions_before`, `actions_after` | the clip's action count either side of it |
-| `change` | `added` · `removed` · `retimed` · `retagged` |
-| `action` | the label involved |
-| `frame`, `time`, `mmss` | **where** — the frame on the 25 fps clock, and the same instant in seconds and `m:ss.ss` |
+| `change` | **the sentence** — the whole point of the row |
+| `clip`, `annotator` | which clip, and whose hand-in it was |
+| `review_at`, `review_by`, `review_no` | which review this row belongs to |
+| `summary` | that review's one-line headline, repeated on each of its rows |
+| `kind` | `added` · `removed` · `relabelled` · `retimed` · `re-tagged` · `note` |
+| `action` | the label involved — the *new* label, for a relabel |
+| `frame`, `time` | **where** — the frame on the 25 fps clock, and `m:ss.ss` |
+| `was_action` | for a relabel, the label it used to be |
 | `from_frame`, `from_time` | for a retime, where the action was before |
-| `tags_changed` | for a retag, which tags: `team` `sure` `body` `goal` `ball` `og` |
-| `detail` | `exact` when the row is one change, `summary` when it is a count |
-| `count` | 1 on an exact row; the tally on a summary row |
+| `tags` | for a re-tag, which tags moved |
+| `signed_off_by`, `signed_off_at` | the clip's sign-off, if it has one |
+| `actions_now` | how many actions the ground truth holds today |
+| `log_file` | which `Review.<clip>.json` the row came from |
 
 Sort by `clip` and `frame` and you have the corrections in the order the clip
-plays. Filter `change = removed` and you have everything a reviewer threw out,
-with the frame to check it at.
+plays. Filter `kind = removed` and you have everything a reviewer threw out,
+with the frame to go and check it at.
 
-`detail` matters if you add the numbers up. An **exact** row is one change at a
-known frame. A **summary** row is a count with no frame, which happens for a
-review recorded before this tool kept locations, for one whose detail has aged
-out of the file, and for one the server had to work out from the two files
-alone. Either way the counts are right; only the position is missing.
+A row whose `kind` is `note` has no frame: it stands in for a review whose
+individual changes were never recorded — one made before the log kept track of
+where, or one the server had to work out by comparing the file before and after.
+Its `summary` and counts are still right; only the positions are missing.
 
 The same URLs work outside the app:
 
 ```
 curl -o logs.zip "http://localhost:9044/api/reviews?format=zip"
+curl -o log.txt  "http://localhost:9044/api/reviews?format=txt"
 curl -o log.csv  "http://localhost:9044/api/reviews?format=csv"
 curl -o one.csv  "http://localhost:9044/api/reviews?format=csv&clip=My%20Clip.mp4"
 curl         "http://localhost:9044/api/reviews?format=json&download=0"
@@ -444,59 +480,73 @@ to work through them before that clip can be saved again. A bad value in any
 tag is repaired rather than dropping the action. Both `{"groundtruth": [...]}`
 and a bare array are accepted.
 
-**Everything about a clip is in that one file.** Alongside `groundtruth` it may
-carry two more keys, both optional:
+**The clip file holds the actions and nothing else.** Alongside `groundtruth`
+it may carry one more key, optional:
 
 ```json
 {
   "annotator": "Dmytro",
-  "reviewed": {"by": "ana", "at": "2026-10-01T06:25:02.880Z", "actions": 183},
-  "reviews": [
-    {"at":"2026-10-01T06:23:20.244Z","by":"ana","before":181,"after":183,"added":{"pass":1},"removed":{"tackle":1},"retimed":1,"retagged":1,
-     "changes":[{"c":"tag","a":"pass","f":25,"k":["team"]},{"c":"del","a":"tackle","f":70},{"c":"time","a":"shot","f":102,"f0":100},{"c":"add","a":"pass","f":120}]}
-  ],
   "groundtruth": [ … ]
 }
 ```
 
-`reviewed` is the sign-off: the clip has been reviewed and nothing has changed
-since. It is written by **Finish review**, deleted again by any save that
-changes the actions, and can be deleted by hand from the Library or the review
-panel. Its presence is a claim about the file as it stands, not a record that
-somebody once looked at it. The Library reads it to show **Reviewed** instead
-of **Review**.
+Review history is **not** in here. It used to be, as `reviews` and `reviewed`
+keys, which put review bookkeeping into the thing that gets handed off. It now
+lives in its own file — see below. An older file that still carries those keys
+is read, migrated and cleaned on its next save.
 
-`reviews` is the clip's review history, oldest first, one line per review that
-changed something — written by the **Review** button, never by hand. `before`
-and `after` are total action counts; `added` and `removed` are per label, and
-for every label `before + added - removed` equals `after`. `retimed` and
-`retagged` count actions that survived the review but moved frame or changed a
-tag. A `"derived": true` entry means the reviewer's own account of the edit did
-not add up and the counts were taken from the two files instead.
+### `Review.<clip>.json`
 
-`changes` says **where** each of those changes happened — one record per change,
-in clip order, with short keys because the log sits above the actions in the
-same file:
+A clip's review history, in its own file beside the ground truth it describes.
+Beside it rather than in a folder of its own, so copying a hand-in still brings
+its history along — the same reason this project keeps one file per clip.
 
-| key | meaning |
-| --- | --- |
-| `c` | `add` · `del` · `time` · `tag` |
-| `a` | the action's label |
-| `f` | the frame, on the 25 fps reporting clock |
-| `f0` | for `time`, the frame it moved from |
-| `k` | for `tag`, which tags changed |
+```json
+{
+  "clip": "Veo U19 Sl Gw18 Paok-Volos 3-0 Cut",
+  "signedOff": {"by": "ana", "at": "2026-10-06T05:41:13.734Z", "actions": 1924},
+  "reviews": [
+    {
+      "at": "2026-10-06T03:57:07.815Z",
+      "by": "ana",
+      "summary": "1924 actions became 1921: 1 action added, 4 actions removed.",
+      "counts": {"before":1924,"after":1921,"added":{"clearance":1},"removed":{"pass":1,"pass_received":2,"clearance":1}},
+      "changes": [
+        {"text":"At frame 70 (0:02.80), the tackle was removed.","kind":"removed","action":"tackle","frame":70,"time":"0:02.80"},
+        {"text":"At frame 150 (0:06.00), the action was clearance, but it was updated to block.","kind":"relabelled","action":"block","frame":150,"time":"0:06.00","wasAction":"clearance"}
+      ]
+    }
+  ]
+}
+```
 
-Relabelling an action is a `del` of the old label and an `add` of the new one
-at the same frame, matching how the counts treat it. The records have to
-account for exactly the counts beside them or they are not written at all — a
-log that says where is only worth having if the where cannot contradict the
-how many — which is also why a `derived` entry never carries them.
+Each change is **a sentence first**. `text` is what it is for; `kind`, `action`,
+`frame`, `time` and the rest are the same thing as columns, for anything that
+would rather sort than read. A re-tag adds `tags`; a retime adds `fromFrame`
+and `fromTime`; a relabel adds `wasAction`.
 
-The log is bounded, because the file is the deliverable: the last **50**
-entries are kept, each with at most **500** change records (`changesOmitted`
-says how many were left out), and only the newest **10** entries keep their
-records at all. Older entries keep their counts, so the totals never change —
-they just stop saying where.
+Relabelling reads as one sentence — *"the action was A, but it was updated to
+B"* — while counting as one removed and one added, which is what it is in
+label-count terms.
+
+`signedOff` is the sign-off: the clip has been reviewed and nothing has changed
+since. **Finish review** writes it, any save that changes the actions deletes
+it, and it can be removed by hand from the Library or the review panel. Its
+presence is a claim about the ground truth as it stands, not a record that
+somebody once looked at the clip. The Library reads it to show **Reviewed**
+instead of **Review**.
+
+`counts` is kept beside each summary for anything adding the log up. For every
+label `before + added - removed` equals `after`. A `"derived": true` means the
+reviewer's own account of the edit did not add up and the counts were taken by
+comparing the file before and after instead; such an entry carries no sentences,
+because there was nothing trustworthy to write.
+
+**The sentences are written by the server**, from structured records the browser
+sends, and only once those records account for exactly the counts the server
+measured against the two files. Nothing can put words in this file that did not
+happen. Which is also the one limitation worth knowing: a review made before
+this existed has its counts but no sentences, and says so in place of them.
 
 That is what makes reviewing someone else's work a copy: **drop their
 `<clip name>.json` anywhere under `groundtruth/`, put the clip in `video/`,

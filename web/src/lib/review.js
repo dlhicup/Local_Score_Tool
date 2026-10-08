@@ -4,46 +4,45 @@ import { REPORTING_FPS } from './fps';
  * What a review session changed.
  *
  * A reviewer opens somebody else's clip, fixes what is wrong, and saves. This
- * works out what "fixed" amounted to, so the clip's file can carry a record of
- * it: how many actions of each label were added, how many removed, and how many
- * of the ones that stayed were moved to a different frame or had a tag changed.
+ * works out what "fixed" amounted to, so the clip's review file can say it:
+ * which action, at which frame, and what about it changed.
  *
  * Matched by event id, which is exact — but only within one session. Ids are
  * not written to the ground-truth file; they are minted when it is read. So the
  * baseline has to be the events this browser loaded, and the diff has to be
  * taken before the save replaces them with a freshly read set.
+ *
+ * The records here are structured, not worded. The server turns them into the
+ * sentences that get written down, after checking them against the file — a log
+ * nothing can put words into is worth more than one written closer to the edit.
  */
-
-const TAG_KEYS = ['team', 'sure', 'body', 'goal_view'];
 
 /** The frame a timestamp lands on, on the same clock the file is written with. */
 const frameOf = (e) =>
   Math.max(0, Math.round(Number(((Number(e?.timestamp) || 0) * REPORTING_FPS).toFixed(6))));
 
-/** Every tag of an event as one comparable string, ball answer included. */
-function tagsOf(e) {
-  const ball = e?.ball_xy === undefined ? 'open' : e.ball_xy === null ? 'hidden' : `${e.ball_xy[0]},${e.ball_xy[1]}`;
-  return TAG_KEYS.map((k) => String(e?.[k])).join('|') + `|${ball}|${e?.own_goal === true}`;
-}
+/** The tags an action carries, under the short names the log uses. */
+const TAGS = [
+  ['team', (e) => e?.team],
+  ['sure', (e) => e?.sure],
+  ['body', (e) => e?.body],
+  ['goal', (e) => e?.goal_view],
+  ['ball', (e) => (e?.ball_xy === undefined ? 'open' : e.ball_xy === null ? null : e.ball_xy)],
+  ['og', (e) => e?.own_goal === true],
+];
 
-/** The ball answer as one comparable value. */
-const ballOf = (e) => (e?.ball_xy === undefined ? 'open' : e.ball_xy === null ? 'hidden' : `${e.ball_xy[0]},${e.ball_xy[1]}`);
+const same = (a, b) =>
+  Array.isArray(a) && Array.isArray(b) ? a[0] === b[0] && a[1] === b[1] : a === b;
 
-/**
- * Which tags differ between two versions of the same action, named.
- *
- * Short names because these are written into the clip's file, where a review
- * log sits above the actions and should not crowd them out.
- */
+/** Which tags differ, as `{ name: [before, after] }`, or null when none do. */
 function changedTags(a, b) {
-  const out = [];
-  if (a.team !== b.team) out.push('team');
-  if (a.sure !== b.sure) out.push('sure');
-  if (a.body !== b.body) out.push('body');
-  if (a.goal_view !== b.goal_view) out.push('goal');
-  if (ballOf(a) !== ballOf(b)) out.push('ball');
-  if (Boolean(a.own_goal) !== Boolean(b.own_goal)) out.push('og');
-  return out;
+  const out = {};
+  for (const [name, read] of TAGS) {
+    const from = read(a);
+    const to = read(b);
+    if (!same(from, to)) out[name] = [from, to];
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 const bump = (o, k) => { o[k] = (o[k] ?? 0) + 1; };
@@ -59,37 +58,37 @@ export function reviewDiff(baseline = [], events = []) {
   const removed = {};
   let retimed = 0;
   let retagged = 0;
-  /**
-   * One record per change, saying where in the clip it happened — the frame
-   * on the reporting clock, which is the only position the file keeps. This is
-   * what makes the log answer "what changed where" rather than only how much.
-   */
   const changes = [];
 
   for (const e of events) {
     const before = was.get(e.id);
-    if (!before) { bump(added, e.type); changes.push({ c: 'add', a: e.type, f: frameOf(e) }); continue; }
+    if (!before) {
+      bump(added, e.type);
+      changes.push({ c: 'add', a: e.type, f: frameOf(e), t: e.team });
+      continue;
+    }
     /**
-     * Changing an action's label is a removal of one and an addition of the
-     * other. That is what it is in label-count terms, and it keeps the
-     * arithmetic the server checks — before + added - removed === after, for
-     * every label — true. A relabelled action is not also counted as retimed
-     * or retagged: it has already been accounted for as two changes.
+     * Relabelling counts as a removal of the old label and an addition of the
+     * new one — that is what it is in label-count terms, and it keeps the
+     * arithmetic the server checks true for every label. It is still one
+     * change to read about, so it is one record: "the action was A, but it was
+     * updated to B". A relabelled action is not also reported as retimed or
+     * re-tagged; it has already been accounted for.
      */
     if (before.type !== e.type) {
       bump(removed, before.type);
       bump(added, e.type);
-      changes.push({ c: 'del', a: before.type, f: frameOf(before) });
-      changes.push({ c: 'add', a: e.type, f: frameOf(e) });
+      changes.push({ c: 'relabel', a: e.type, a0: before.type, f: frameOf(e) });
       continue;
     }
     if (frameOf(before) !== frameOf(e)) {
       retimed += 1;
       changes.push({ c: 'time', a: e.type, f: frameOf(e), f0: frameOf(before) });
     }
-    if (tagsOf(before) !== tagsOf(e)) {
+    const tags = changedTags(before, e);
+    if (tags) {
       retagged += 1;
-      changes.push({ c: 'tag', a: e.type, f: frameOf(e), k: changedTags(before, e) });
+      changes.push({ c: 'tag', a: e.type, f: frameOf(e), k: tags });
     }
   }
   for (const b of baseline) {
@@ -99,8 +98,9 @@ export function reviewDiff(baseline = [], events = []) {
     }
   }
 
-  // Clip order, so the log reads the way the clip plays.
-  changes.sort((x, y) => x.f - y.f || x.c.localeCompare(y.c) || x.a.localeCompare(y.a));
+  // Clip order, so the log reads the way the clip plays. A retime is placed
+  // where the action was, since that is where a reader would look for it.
+  changes.sort((x, y) => (x.c === 'time' ? x.f0 : x.f) - (y.c === 'time' ? y.f0 : y.f));
 
   const addedTotal = sum(added);
   const removedTotal = sum(removed);

@@ -85,13 +85,23 @@ function clipKey(name) {
  */
 const MAX_DEPTH = 6;
 
+/**
+ * Review histories live beside the ground truth they describe, as
+ * `Review.<clip>.json`. They are not ground truth, so they must never be
+ * indexed as a clip — otherwise every reviewed clip grows a phantom sibling
+ * called "Review.<clip>" that matches no video and gets reported as an
+ * orphaned hand-in. Checked here rather than imported from reviewfile.js,
+ * which reads this module.
+ */
+const REVIEW_FILE = /^review\./i;
+
 async function walkJson(dir, out = [], depth = 0) {
   if (depth > MAX_DEPTH) return out;
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const e of entries) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) await walkJson(full, out, depth + 1);
-    else if (e.isFile() && e.name.toLowerCase().endsWith('.json')) out.push(full);
+    else if (e.isFile() && e.name.toLowerCase().endsWith('.json') && !REVIEW_FILE.test(e.name)) out.push(full);
   }
   return out;
 }

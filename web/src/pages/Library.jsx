@@ -160,23 +160,26 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
         {/* This clip's review log, without opening it. A link rather than a
             button so the browser downloads it; stopPropagation because the row
             itself opens the clip. Only offered where there is a log. */}
+        {/* This clip's review log, without opening it. Plain text, because the
+            log is written to be read; the header has the spreadsheet forms.
+            A link rather than a button so the browser downloads it, and
+            stopPropagation because the row itself opens the clip. */}
         {reviewCount > 0 ? (
           <a
-            href={api.reviewLogUrl({ clip: v.name, format: 'csv' })}
+            href={api.reviewLogUrl({ clip: v.name, format: 'txt' })}
             download
             onClick={(e) => e.stopPropagation()}
-            title={`Download the review log for ${v.name} — ${reviewCount} review${reviewCount === 1 ? '' : 's'}, one row per change`}
-            className="flex items-center gap-0.5 rounded-md border border-white/[0.07] px-1.5 py-1 text-2xs font-semibold text-ink-400 transition hover:border-pitch-500/40 hover:bg-pitch-500/10 hover:text-pitch-400"
+            title={`Download the review log for ${v.name}: ${reviewCount} review${reviewCount === 1 ? '' : 's'}, written out in full`}
+            className="flex items-center gap-1 rounded-md border border-white/[0.07] px-1.5 py-1 text-2xs font-semibold text-ink-400 transition hover:border-pitch-500/40 hover:bg-pitch-500/10 hover:text-pitch-400"
           >
-            <Download size={11} />
-            {reviewCount}
+            <Download size={11} /> Log
           </a>
         ) : (
           <span
             title="No review log: this clip has not been reviewed yet"
             className="px-1.5 py-1 text-2xs text-ink-700"
           >
-            —
+            no log
           </span>
         )}
       </span>
@@ -392,20 +395,28 @@ export default function Library() {
               {logs?.reviews ? (
                 <>
                   <a
-                    href={api.reviewLogUrl({ format: 'csv' })}
-                    download
-                    className="flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:bg-white/10 hover:text-white"
-                    title="One table for the whole corpus: every change, one row each — clip, reviewer, what changed, and the frame it happened on"
-                  >
-                    <Download size={12} /> combined
-                  </a>
-                  <a
                     href={api.reviewLogUrl({ format: 'zip' })}
                     download
                     className="flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:bg-white/10 hover:text-white"
-                    title="One CSV per video, zipped, with an _index.csv listing what is inside"
+                    title="One file per video, zipped: a readable .txt and a sortable .csv for each, plus an _index.csv listing what is inside"
                   >
                     <Download size={12} /> per video
+                  </a>
+                  <a
+                    href={api.reviewLogUrl({ format: 'txt' })}
+                    download
+                    className="rounded-md px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:bg-white/10 hover:text-white"
+                    title="Every clip's log written out as text, one file"
+                  >
+                    text
+                  </a>
+                  <a
+                    href={api.reviewLogUrl({ format: 'csv' })}
+                    download
+                    className="rounded-md px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:bg-white/10 hover:text-white"
+                    title="One spreadsheet for the whole corpus: every change, one row each, with the frame it happened on"
+                  >
+                    CSV
                   </a>
                   <a
                     href={api.reviewLogUrl({ format: 'json' })}

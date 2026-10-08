@@ -1,70 +1,61 @@
 import { Router } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { groundTruthIndex, GT_DIR, REPORTING_FPS } from '../services/gtfile.js';
+import { groundTruthIndex, GT_DIR } from '../services/gtfile.js';
+import { reviewFileIndex, readReviewFileAt } from '../services/reviewfile.js';
 import { requireAuth } from '../middleware/auth.js';
 import { zipSync, safeEntryName } from '../services/zip.js';
 
 /**
- * The review log, for downloading.
+ * The review history, for downloading.
  *
- * Every clip's file carries its own review history — who corrected it, when,
- * and which actions they added, removed, retimed or re-tagged. That is the
- * right place for it to live: it travels with the file. It is the wrong place
- * to *read* it from when the question is about the corpus rather than one clip,
- * which is what this is for: one request, every clip's history, as a table.
- *
- * CSV is one row per change, because the question people ask of this is "what
- * changed where" and a spreadsheet answers that. JSON is the log as stored, for
- * anything that would rather parse than read.
+ * Each clip keeps its own history in `Review.<clip>.json` beside its ground
+ * truth, written as sentences. That is the right place for it to live: it
+ * travels with the hand-in, and a person can open it and read it. It is the
+ * wrong place to read it from when the question is about the corpus rather than
+ * one clip, which is what this is for — one request, every clip, as a table.
  */
 const router = Router();
 
-/** A frame on the reporting clock -> the timestamp it denotes. */
-const seconds = (frame) => Number((Number(frame) / REPORTING_FPS).toFixed(2));
-
-/** mm:ss.ss, for reading against a video player. */
-function clock(frame) {
-  const s = Number(frame) / REPORTING_FPS;
-  if (!Number.isFinite(s) || s < 0) return '';
-  const m = Math.floor(s / 60);
-  const rest = s - m * 60;
-  return `${m}:${rest.toFixed(2).padStart(5, '0')}`;
-}
-
-/** What one change record says, in words. */
-const KIND = { add: 'added', del: 'removed', time: 'retimed', tag: 'retagged' };
+/** Excel reads a UTF-8 CSV as the system codepage without this. */
+const BOM = '﻿';
 
 /**
- * Read every clip's review history.
- *
- * Reads the files directly rather than going through listProjects(), which
- * probes each clip's video — none of which this needs, and which would make a
- * download of the log wait on ffprobe.
+ * Every clip's history. Walks the review files, then looks up the ground truth
+ * beside each one for the annotator's name and the action count — neither of
+ * which the history itself should be duplicating.
  */
 async function collect(onlyClip = null) {
-  const index = await groundTruthIndex();
+  const [reviewFiles, clips] = await Promise.all([reviewFileIndex(), groundTruthIndex()]);
   const out = [];
-  for (const [, entry] of index) {
-    const clip = path.basename(entry.rel).replace(/\.json$/i, '');
-    if (onlyClip && clip.toLowerCase() !== onlyClip.toLowerCase()) continue;
-    let doc;
-    try {
-      doc = JSON.parse(await fs.readFile(entry.path, 'utf8'));
-    } catch {
-      continue; // a file that no longer parses has no history to report
+  for (const [key, entry] of reviewFiles) {
+    if (onlyClip && key !== onlyClip.toLowerCase()) continue;
+    const doc = await readReviewFileAt(entry.path);
+    if (!doc || (!doc.reviews.length && !doc.signedOff)) continue;
+
+    let annotator = null;
+    let actions = null;
+    const gt = clips.get(key);
+    if (gt) {
+      try {
+        const clipDoc = JSON.parse(await fs.readFile(gt.path, 'utf8'));
+        if (!Array.isArray(clipDoc)) {
+          annotator = typeof clipDoc?.annotator === 'string' ? clipDoc.annotator : null;
+          actions = Array.isArray(clipDoc?.groundtruth) ? clipDoc.groundtruth.length : null;
+        } else {
+          actions = clipDoc.length;
+        }
+      } catch { /* a clip file that no longer parses still has a history */ }
     }
-    if (Array.isArray(doc)) continue;
-    const reviews = Array.isArray(doc?.reviews) ? doc.reviews.filter((x) => x && typeof x === 'object') : [];
-    const reviewed = doc?.reviewed && typeof doc.reviewed === 'object' ? doc.reviewed : null;
-    if (!reviews.length && !reviewed) continue;
+
     out.push({
-      clip,
-      file: entry.rel,
-      annotator: typeof doc?.annotator === 'string' ? doc.annotator : null,
-      actions: Array.isArray(doc?.groundtruth) ? doc.groundtruth.length : null,
-      reviewed,
-      reviews,
+      clip: entry.clip,
+      logFile: entry.rel,
+      groundTruthFile: gt ? gt.rel : null,
+      annotator,
+      actions,
+      signedOff: doc.signedOff,
+      reviews: doc.reviews,
     });
   }
   out.sort((a, b) => a.clip.localeCompare(b.clip));
@@ -76,31 +67,29 @@ const esc = (v) => {
   return /[",\r\n]/.test(s) ? `"${s.split('"').join('""')}"` : s;
 };
 
+/**
+ * The sentence comes first, because that is what the log is for. The numbers
+ * follow for anything that wants to sort or total them.
+ */
 const COLUMNS = [
-  'clip', 'file', 'annotator', 'reviewed_at', 'reviewed_by',
-  'review_at', 'review_by', 'review_index', 'actions_before', 'actions_after',
-  'detail', 'change', 'action', 'frame', 'time', 'mmss',
-  'from_frame', 'from_time', 'tags_changed', 'count', 'note',
+  'clip', 'annotator', 'review_at', 'review_by', 'review_no', 'summary',
+  'change', 'kind', 'action', 'frame', 'time', 'was_action', 'from_frame', 'from_time', 'tags',
+  'signed_off_by', 'signed_off_at', 'actions_now', 'log_file',
 ];
 
-/**
- * One row per change, with a summary row standing in wherever the per-change
- * detail is not on file — an older review whose detail has aged out, or one the
- * server had to work out from the two files alone. The `detail` column says
- * which it is, so a total taken from this table is never silently wrong.
- */
 function toRows(clips) {
   const rows = [];
   for (const c of clips) {
     const base = {
       clip: c.clip,
-      file: c.file,
       annotator: c.annotator,
-      reviewed_at: c.reviewed?.at ?? '',
-      reviewed_by: c.reviewed?.by ?? '',
+      signed_off_by: c.signedOff?.by ?? '',
+      signed_off_at: c.signedOff?.at ?? '',
+      actions_now: c.actions,
+      log_file: c.logFile,
     };
     if (!c.reviews.length) {
-      rows.push({ ...base, detail: 'none', note: 'signed off with no review on record' });
+      rows.push({ ...base, change: 'Signed off with no review on record.', kind: 'note' });
       continue;
     }
     c.reviews.forEach((r, i) => {
@@ -108,42 +97,25 @@ function toRows(clips) {
         ...base,
         review_at: r.at ?? '',
         review_by: r.by ?? '',
-        review_index: i + 1,
-        actions_before: r.before ?? '',
-        actions_after: r.after ?? '',
+        review_no: i + 1,
+        summary: r.summary ?? '',
       };
-      if (Array.isArray(r.changes) && r.changes.length) {
-        for (const x of r.changes) {
-          rows.push({
-            ...head,
-            detail: 'exact',
-            change: KIND[x.c] ?? x.c,
-            action: x.a,
-            frame: x.f,
-            time: seconds(x.f),
-            mmss: clock(x.f),
-            from_frame: x.c === 'time' ? x.f0 : '',
-            from_time: x.c === 'time' ? seconds(x.f0) : '',
-            tags_changed: x.c === 'tag' ? (x.k ?? []).join(' ') : '',
-            count: 1,
-          });
-        }
-        if (r.changesOmitted) {
-          rows.push({ ...head, detail: 'summary', change: 'omitted', count: r.changesOmitted, note: 'change list was capped' });
-        }
-      } else {
-        // Counts only. Emit one row per label so the table still adds up.
-        for (const [label, n] of Object.entries(r.added ?? {})) {
-          rows.push({ ...head, detail: 'summary', change: 'added', action: label, count: n });
-        }
-        for (const [label, n] of Object.entries(r.removed ?? {})) {
-          rows.push({ ...head, detail: 'summary', change: 'removed', action: label, count: n });
-        }
-        if (r.retimed) rows.push({ ...head, detail: 'summary', change: 'retimed', count: r.retimed });
-        if (r.retagged) rows.push({ ...head, detail: 'summary', change: 'retagged', count: r.retagged });
-        if (r.derived) {
-          rows.push({ ...head, detail: 'summary', change: 'note', note: "counts taken from the files, not the reviewer's own account" });
-        }
+      const changes = Array.isArray(r.changes) && r.changes.length
+        ? r.changes
+        : [{ text: r.summary ?? '', kind: 'note' }];
+      for (const x of changes) {
+        rows.push({
+          ...head,
+          change: x.text ?? '',
+          kind: x.kind ?? '',
+          action: x.action ?? '',
+          frame: x.frame ?? '',
+          time: x.time ?? '',
+          was_action: x.wasAction ?? '',
+          from_frame: x.fromFrame ?? '',
+          from_time: x.fromTime ?? '',
+          tags: x.tags ?? '',
+        });
       }
     });
   }
@@ -153,26 +125,51 @@ function toRows(clips) {
 const toCsv = (rows) =>
   [COLUMNS.join(','), ...rows.map((r) => COLUMNS.map((k) => esc(r[k])).join(','))].join('\r\n') + '\r\n';
 
-// Excel reads a UTF-8 CSV as the system codepage without a byte-order mark,
-// which turns every clip name carrying an accent into mojibake.
-const BOM = '﻿';
+/**
+ * One clip's history as plain text — the sentences and nothing else. This is
+ * the form the log was asked for: openable, readable, no decoding.
+ */
+function toText(c) {
+  const lines = [`Review log — ${c.clip}`];
+  if (c.annotator) lines.push(`Annotated by ${c.annotator}`);
+  if (c.actions !== null) lines.push(`${c.actions} actions in the ground truth now`);
+  if (c.signedOff) {
+    lines.push(`Signed off by ${c.signedOff.by ?? 'unknown'} on ${String(c.signedOff.at ?? '').slice(0, 16).replace('T', ' ')}`);
+  } else {
+    lines.push('Not signed off');
+  }
+  lines.push('');
+  if (!c.reviews.length) lines.push('No reviews on record.');
+  c.reviews.forEach((r, i) => {
+    lines.push(`${'-'.repeat(70)}`);
+    lines.push(`Review ${i + 1} — ${String(r.at ?? '').slice(0, 16).replace('T', ' ')} by ${r.by ?? 'unknown'}`);
+    if (r.summary) lines.push(r.summary);
+    lines.push('');
+    for (const x of Array.isArray(r.changes) ? r.changes : []) {
+      lines.push(`  - ${x.text ?? ''}`);
+    }
+    lines.push('');
+  });
+  return lines.join('\r\n');
+}
 
-/** One row per clip: what was reviewed, by whom, and how much. */
 const INDEX_COLUMNS = [
-  'clip', 'file', 'annotator', 'actions', 'reviews', 'changes_recorded',
+  'clip', 'annotator', 'actions_now', 'reviews', 'changes_recorded',
   'signed_off_by', 'signed_off_at', 'log_file',
 ];
 
 function indexCsv(clips, names) {
   const rows = clips.map((c, i) => ({
     clip: c.clip,
-    file: c.file,
     annotator: c.annotator,
-    actions: c.actions,
+    actions_now: c.actions,
     reviews: c.reviews.length,
-    changes_recorded: c.reviews.reduce((n, r) => n + (Array.isArray(r.changes) ? r.changes.length : 0), 0),
-    signed_off_by: c.reviewed?.by ?? '',
-    signed_off_at: c.reviewed?.at ?? '',
+    changes_recorded: c.reviews.reduce(
+      (n, r) => n + (Array.isArray(r.changes) ? r.changes.filter((x) => x.kind && x.kind !== 'note').length : 0),
+      0,
+    ),
+    signed_off_by: c.signedOff?.by ?? '',
+    signed_off_at: c.signedOff?.at ?? '',
     log_file: names[i],
   }));
   const head = INDEX_COLUMNS.join(',');
@@ -181,30 +178,30 @@ function indexCsv(clips, names) {
 }
 
 /**
- * Every clip's log as its own file, in one download.
+ * Every clip's log as its own pair of files, in one download.
  *
- * A file per clip rather than one combined table, because that is how the work
- * is organised: one reviewer goes through one video, and the file that comes out
- * should be the one you open next to it. `_index.csv` says what is in the
- * archive, so a hundred entries stay searchable without opening them.
+ * A file per clip because that is how the work is organised: one reviewer goes
+ * through one video. Both forms, because both get asked for — the .txt to read,
+ * the .csv to sort. `_index.csv` says what is in the archive.
  */
 function toZip(clips, at) {
   const used = new Map();
   const names = clips.map((c) => {
     let name = safeEntryName(c.clip, { ext: 'csv' });
-    // Two clips can sanitise to the same filename, and a zip holding the same
-    // name twice quietly loses one of them on extraction.
     const seen = used.get(name.toLowerCase()) ?? 0;
     used.set(name.toLowerCase(), seen + 1);
     if (seen) name = safeEntryName(`${c.clip} (${seen + 1})`, { ext: 'csv' });
     return name;
   });
-  const entries = clips.map((c, i) => ({ name: names[i], data: BOM + toCsv(toRows([c])) }));
+  const entries = [];
+  clips.forEach((c, i) => {
+    entries.push({ name: `csv/${names[i]}`, data: BOM + toCsv(toRows([c])) });
+    entries.push({ name: `text/${names[i].replace(/\.csv$/, '.txt')}`, data: toText(c) });
+  });
   entries.unshift({ name: '_index.csv', data: indexCsv(clips, names) });
   return zipSync(entries, { at });
 }
 
-/** A filename a download can land under without being mistaken for another. */
 function filename(ext, clip) {
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   const who = clip ? clip.replace(/[^A-Za-z0-9._-]+/g, '_') : 'all-clips';
@@ -219,38 +216,39 @@ router.get('/reviews', requireAuth, async (req, res, next) => {
       : null;
     const clips = await collect(clip);
     const format = String(req.query.format ?? '').toLowerCase();
-    const csv = format === 'csv';
-    const zip = format === 'zip';
-    // `download` is what makes the browser save it rather than show it; without
-    // it this is just as useful to read in a tab.
     const attach = req.query.download !== '0';
 
-    if (zip) {
+    if (format === 'zip') {
       res.setHeader('Content-Type', 'application/zip');
       if (attach) res.setHeader('Content-Disposition', `attachment; filename="${filename('zip', clip)}"`);
       return res.send(toZip(clips, new Date()));
     }
 
-    if (csv) {
-      const rows = toRows(clips);
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      if (attach) res.setHeader('Content-Disposition', `attachment; filename="${filename('csv', clip)}"`);
-      return res.send(BOM + toCsv(rows));
+    if (format === 'txt') {
+      const body = clips.map(toText).join('\r\n\r\n');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      if (attach) res.setHeader('Content-Disposition', `attachment; filename="${filename('txt', clip)}"`);
+      return res.send(body || 'No reviews on record.\r\n');
     }
 
-    const body = {
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      if (attach) res.setHeader('Content-Disposition', `attachment; filename="${filename('csv', clip)}"`);
+      return res.send(BOM + toCsv(toRows(clips)));
+    }
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (attach) res.setHeader('Content-Disposition', `attachment; filename="${filename('json', clip)}"`);
+    res.send(JSON.stringify({
       generatedAt: new Date().toISOString(),
       dir: GT_DIR,
       clips,
       totals: {
         clips: clips.length,
         reviews: clips.reduce((n, c) => n + c.reviews.length, 0),
-        signedOff: clips.filter((c) => c.reviewed).length,
+        signedOff: clips.filter((c) => c.signedOff).length,
       },
-    };
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    if (attach) res.setHeader('Content-Disposition', `attachment; filename="${filename('json', clip)}"`);
-    res.send(JSON.stringify(body, null, 2));
+    }, null, 2));
   } catch (err) {
     next(err);
   }
@@ -264,10 +262,13 @@ router.get('/reviews/summary', requireAuth, async (_req, res, next) => {
       clips: clips.length,
       reviews: clips.reduce((n, c) => n + c.reviews.length, 0),
       changes: clips.reduce(
-        (n, c) => n + c.reviews.reduce((m, r) => m + (Array.isArray(r.changes) ? r.changes.length : 0), 0),
+        (n, c) => n + c.reviews.reduce(
+          (m, r) => m + (Array.isArray(r.changes) ? r.changes.filter((x) => x.kind && x.kind !== 'note').length : 0),
+          0,
+        ),
         0,
       ),
-      signedOff: clips.filter((c) => c.reviewed).length,
+      signedOff: clips.filter((c) => c.signedOff).length,
     });
   } catch (err) {
     next(err);

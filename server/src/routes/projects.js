@@ -140,7 +140,7 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
         ? null
         : undefined; // untouched: leave whatever the file already says
 
-    const { project: stored, written } = await writeProject(project, { appendReview: entry, reviewed });
+    const { project: stored, written } = await writeProject(project, { logEntry: entry, reviewed });
 
     res.json({
       project: stored,

@@ -8,7 +8,7 @@ import {
   findGroundTruth, groundTruthIndex, toFrame, GT_DIR,
 } from './gtfile.js';
 import { probeVideo } from './media.js';
-import { pruneLog } from './reviewlog.js';
+import { readReviewFile, reviewStatus, appendReview, setSignedOff } from './reviewfile.js';
 import { sweepTempFiles } from './atomic.js';
 
 /**
@@ -148,11 +148,12 @@ export function emptyProject({ name, video }) {
  * the file's timestamps and the video's own dimensions.
  */
 export async function projectForClip(filename) {
-  const [events, extra, times, media] = await Promise.all([
+  const [events, extra, times, media, review] = await Promise.all([
     readEvents(filename),
     readSidecarKeys(filename),
     fileTimes(filename),
     videoPath(filename).then(probeVideo),
+    readReviewFile(filename),
   ]);
   return {
     ...emptyProject({ name: filename, video: { filename, ...media } }),
@@ -161,10 +162,10 @@ export async function projectForClip(filename) {
       ...times,
       review: extra.review ?? null,
       annotator: typeof extra.annotator === 'string' ? extra.annotator : null,
-      // What past reviews changed, oldest first. Read-only to the client; the
-      // server is the only thing that appends to it.
-      reviews: Array.isArray(extra.reviews) ? extra.reviews.filter((x) => x && typeof x === 'object') : [],
-      reviewed: extra.reviewed && typeof extra.reviewed === 'object' ? extra.reviewed : null,
+      // Both come from Review.<clip>.json beside the ground truth, not from
+      // the clip file: review bookkeeping does not belong in the deliverable.
+      reviews: review.reviews,
+      reviewed: review.signedOff,
     },
   };
 }
@@ -183,7 +184,9 @@ export async function listProjects() {
       byType[e.type] = (byType[e.type] ?? 0) + 1;
       if (e.team === 'unknown') unknownTeam += 1;
     }
-    const [times, media] = await Promise.all([fileTimes(name), videoPath(name).then(probeVideo)]);
+    const [times, media, status] = await Promise.all([
+      fileTimes(name), videoPath(name).then(probeVideo), reviewStatus(name),
+    ]);
 
     out.push({
       id: idForVideo(name),
@@ -201,10 +204,10 @@ export async function listProjects() {
       duration: media.duration,
       meta: { ...times, review: extra.review ?? null, annotator: extra.annotator ?? null },
       review: extra.review ?? null,
-      reviewed: extra.reviewed && typeof extra.reviewed === 'object' ? extra.reviewed : null,
+      reviewed: status.signedOff,
       // Just the count: a row needs to know whether there is a log to offer,
       // not what is in it.
-      reviewCount: Array.isArray(extra.reviews) ? extra.reviews.filter((x) => x && typeof x === 'object').length : 0,
+      reviewCount: status.reviewCount,
       annotator: extra.annotator ?? null,
     });
   }
@@ -240,16 +243,14 @@ export async function readProject(id) {
  * keeps beside them. Anything already in the file that we do not understand is
  * read back and preserved, so a field another tool added is never dropped.
  *
- * `appendReview` adds one line to the clip's review log — see reviewlog.js.
- * The log is capped, oldest first, so a clip that is reviewed every week does
- * not end up with more history above its actions than actions.
- *
- * `reviewed` is the clip's sign-off: who finished reviewing it and when.
- * Passing an object records one; passing `null` clears it. It is cleared
- * whenever the actions change, so "reviewed" keeps meaning "signed off, and
- * nothing has happened to it since" rather than "signed off once, long ago".
+ * `logEntry` is one entry for the clip's review history and `reviewed` its
+ * sign-off. Neither is written into the clip file: both go to
+ * Review.<clip>.json beside it, so what gets handed off is the actions and
+ * nothing else. Passing `reviewed: null` clears the sign-off, which is what
+ * happens whenever the actions change — so "reviewed" keeps meaning "signed
+ * off, and nothing has happened to it since".
  */
-export async function writeProject(project, { appendReview = null, reviewed } = {}) {
+export async function writeProject(project, { logEntry = null, reviewed } = {}) {
   const filename = project?.video?.filename;
   if (!filename) throw Object.assign(new Error('Project has no clip'), { status: 400 });
 
@@ -266,17 +267,17 @@ export async function writeProject(project, { appendReview = null, reviewed } = 
     else extra.annotator = annotator;
   }
 
-  if (appendReview) {
-    const log = Array.isArray(existing.reviews) ? existing.reviews.filter((x) => x && typeof x === 'object') : [];
-    extra.reviews = pruneLog([...log, appendReview]);
-  }
-
-  if (reviewed !== undefined) {
-    if (reviewed) extra.reviewed = reviewed;
-    else delete extra.reviewed;
-  }
+  // Anything an older build left in the clip file goes: the history has its
+  // own file now, and leaving a stale copy behind invites reading the wrong
+  // one — the mistake this project has already made once.
+  delete extra.reviews;
+  delete extra.reviewed;
 
   const written = await writeEvents(filename, project.events ?? [], extra);
+  // After the actions, so a crash between the two leaves a clip whose history
+  // is behind rather than one claiming a change that was never written.
+  if (logEntry) await appendReview(filename, logEntry);
+  if (reviewed !== undefined) await setSignedOff(filename, reviewed);
   return { project: await projectForClip(filename), written };
 }
 
