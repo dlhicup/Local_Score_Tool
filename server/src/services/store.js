@@ -202,6 +202,9 @@ export async function listProjects() {
       meta: { ...times, review: extra.review ?? null, annotator: extra.annotator ?? null },
       review: extra.review ?? null,
       reviewed: extra.reviewed && typeof extra.reviewed === 'object' ? extra.reviewed : null,
+      // Just the count: a row needs to know whether there is a log to offer,
+      // not what is in it.
+      reviewCount: Array.isArray(extra.reviews) ? extra.reviews.filter((x) => x && typeof x === 'object').length : 0,
       annotator: extra.annotator ?? null,
     });
   }

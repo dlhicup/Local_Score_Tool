@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { groundTruthIndex, GT_DIR, REPORTING_FPS } from '../services/gtfile.js';
 import { requireAuth } from '../middleware/auth.js';
+import { zipSync, safeEntryName } from '../services/zip.js';
 
 /**
  * The review log, for downloading.
@@ -152,11 +153,63 @@ function toRows(clips) {
 const toCsv = (rows) =>
   [COLUMNS.join(','), ...rows.map((r) => COLUMNS.map((k) => esc(r[k])).join(','))].join('\r\n') + '\r\n';
 
+// Excel reads a UTF-8 CSV as the system codepage without a byte-order mark,
+// which turns every clip name carrying an accent into mojibake.
+const BOM = '﻿';
+
+/** One row per clip: what was reviewed, by whom, and how much. */
+const INDEX_COLUMNS = [
+  'clip', 'file', 'annotator', 'actions', 'reviews', 'changes_recorded',
+  'signed_off_by', 'signed_off_at', 'log_file',
+];
+
+function indexCsv(clips, names) {
+  const rows = clips.map((c, i) => ({
+    clip: c.clip,
+    file: c.file,
+    annotator: c.annotator,
+    actions: c.actions,
+    reviews: c.reviews.length,
+    changes_recorded: c.reviews.reduce((n, r) => n + (Array.isArray(r.changes) ? r.changes.length : 0), 0),
+    signed_off_by: c.reviewed?.by ?? '',
+    signed_off_at: c.reviewed?.at ?? '',
+    log_file: names[i],
+  }));
+  const head = INDEX_COLUMNS.join(',');
+  const body = rows.map((r) => INDEX_COLUMNS.map((k) => esc(r[k])).join(','));
+  return BOM + [head, ...body].join('\r\n') + '\r\n';
+}
+
+/**
+ * Every clip's log as its own file, in one download.
+ *
+ * A file per clip rather than one combined table, because that is how the work
+ * is organised: one reviewer goes through one video, and the file that comes out
+ * should be the one you open next to it. `_index.csv` says what is in the
+ * archive, so a hundred entries stay searchable without opening them.
+ */
+function toZip(clips, at) {
+  const used = new Map();
+  const names = clips.map((c) => {
+    let name = safeEntryName(c.clip, { ext: 'csv' });
+    // Two clips can sanitise to the same filename, and a zip holding the same
+    // name twice quietly loses one of them on extraction.
+    const seen = used.get(name.toLowerCase()) ?? 0;
+    used.set(name.toLowerCase(), seen + 1);
+    if (seen) name = safeEntryName(`${c.clip} (${seen + 1})`, { ext: 'csv' });
+    return name;
+  });
+  const entries = clips.map((c, i) => ({ name: names[i], data: BOM + toCsv(toRows([c])) }));
+  entries.unshift({ name: '_index.csv', data: indexCsv(clips, names) });
+  return zipSync(entries, { at });
+}
+
 /** A filename a download can land under without being mistaken for another. */
 function filename(ext, clip) {
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   const who = clip ? clip.replace(/[^A-Za-z0-9._-]+/g, '_') : 'all-clips';
-  return `review-log_${who}_${stamp}.${ext}`;
+  const what = ext === 'zip' ? 'review-logs_per-clip' : 'review-log';
+  return `${what}_${who}_${stamp}.${ext}`;
 }
 
 router.get('/reviews', requireAuth, async (req, res, next) => {
@@ -165,18 +218,24 @@ router.get('/reviews', requireAuth, async (req, res, next) => {
       ? path.basename(req.query.clip.trim()).replace(/\.(json|mp4|webm|mov|mkv|m4v)$/i, '')
       : null;
     const clips = await collect(clip);
-    const csv = String(req.query.format ?? '').toLowerCase() === 'csv';
+    const format = String(req.query.format ?? '').toLowerCase();
+    const csv = format === 'csv';
+    const zip = format === 'zip';
     // `download` is what makes the browser save it rather than show it; without
     // it this is just as useful to read in a tab.
     const attach = req.query.download !== '0';
+
+    if (zip) {
+      res.setHeader('Content-Type', 'application/zip');
+      if (attach) res.setHeader('Content-Disposition', `attachment; filename="${filename('zip', clip)}"`);
+      return res.send(toZip(clips, new Date()));
+    }
 
     if (csv) {
       const rows = toRows(clips);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       if (attach) res.setHeader('Content-Disposition', `attachment; filename="${filename('csv', clip)}"`);
-      // Excel reads a UTF-8 CSV as the system codepage unless it sees a BOM,
-      // which turns every clip name with an accent in it into mojibake.
-      return res.send('﻿' + toCsv(rows));
+      return res.send(BOM + toCsv(rows));
     }
 
     const body = {

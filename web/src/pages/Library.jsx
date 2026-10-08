@@ -40,6 +40,9 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
   // Who signed this clip off, if anyone. The server clears it whenever the
   // actions change, so its presence means "signed off and untouched since".
   const reviewed = p?.reviewed ?? null;
+  // How many reviews this clip has been through. Drives whether there is a
+  // log to download for it at all.
+  const reviewCount = p?.reviewCount ?? 0;
 
   const mix = p?.byType
     ? EVENT_LABELS.map((l) => ({ l, n: p.byType[l] ?? 0 })).filter((x) => x.n > 0)
@@ -57,7 +60,7 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(v, 'annotate'); }
       }}
-      className="group grid w-full cursor-pointer grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_196px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
+      className="group grid w-full cursor-pointer grid-cols-[20px_minmax(0,1fr)_88px_64px_56px_80px_248px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
     >
       <Icon size={15} className={`shrink-0 ${s.tone}`} title={s.label} />
 
@@ -153,6 +156,29 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
         >
           Annotate
         </button>
+
+        {/* This clip's review log, without opening it. A link rather than a
+            button so the browser downloads it; stopPropagation because the row
+            itself opens the clip. Only offered where there is a log. */}
+        {reviewCount > 0 ? (
+          <a
+            href={api.reviewLogUrl({ clip: v.name, format: 'csv' })}
+            download
+            onClick={(e) => e.stopPropagation()}
+            title={`Download the review log for ${v.name} — ${reviewCount} review${reviewCount === 1 ? '' : 's'}, one row per change`}
+            className="flex items-center gap-0.5 rounded-md border border-white/[0.07] px-1.5 py-1 text-2xs font-semibold text-ink-400 transition hover:border-pitch-500/40 hover:bg-pitch-500/10 hover:text-pitch-400"
+          >
+            <Download size={11} />
+            {reviewCount}
+          </a>
+        ) : (
+          <span
+            title="No review log: this clip has not been reviewed yet"
+            className="px-1.5 py-1 text-2xs text-ink-700"
+          >
+            —
+          </span>
+        )}
       </span>
 
       <span className="relative flex items-center justify-end">
@@ -369,9 +395,17 @@ export default function Library() {
                     href={api.reviewLogUrl({ format: 'csv' })}
                     download
                     className="flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:bg-white/10 hover:text-white"
-                    title="Every change, one row each: clip, reviewer, what changed, and the frame it happened on"
+                    title="One table for the whole corpus: every change, one row each — clip, reviewer, what changed, and the frame it happened on"
                   >
-                    <Download size={12} /> CSV
+                    <Download size={12} /> combined
+                  </a>
+                  <a
+                    href={api.reviewLogUrl({ format: 'zip' })}
+                    download
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:bg-white/10 hover:text-white"
+                    title="One CSV per video, zipped, with an _index.csv listing what is inside"
+                  >
+                    <Download size={12} /> per video
                   </a>
                   <a
                     href={api.reviewLogUrl({ format: 'json' })}
@@ -431,8 +465,8 @@ export default function Library() {
               clip name — the only column whose content cannot be guessed — to
               nothing, and rather than clipping the buttons off the right. */}
           <div className="overflow-x-auto">
-            <div className="min-w-[904px]">
-            <div className="grid grid-cols-[20px_minmax(0,1fr)_104px_76px_84px_104px_196px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
+            <div className="min-w-[936px]">
+            <div className="grid grid-cols-[20px_minmax(0,1fr)_88px_64px_56px_80px_248px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
               <span />
               <span>Clip</span>
               <span>Assigned to</span>

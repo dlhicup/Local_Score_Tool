@@ -211,12 +211,22 @@ back door to saving them.
 
 ### Downloading the review log
 
-**Review log · CSV / JSON** in the Library header downloads the history of
-every clip at once. The review panel has a **CSV** link for the open clip on
-its own.
+There are three ways to get it, all in the **Review log** control in the
+Library header:
 
-The CSV is **one row per change**, which is what makes it answer *what changed
-where*:
+| | what you get |
+| --- | --- |
+| **per video** | a zip holding **one CSV per video**, named after the clip, plus an `_index.csv` saying what is in the archive and how much each clip was reviewed |
+| **combined** | one CSV covering every clip, for sorting the whole corpus in one sheet |
+| **JSON** | the log exactly as the clip files store it |
+
+Each row in the Library also has a small **⬇ n** beside its buttons — *n*
+being how many times that clip has been reviewed — which downloads that one
+clip's log without opening it. A clip that has never been reviewed shows a
+dash instead. The review panel has the same link for the clip you have open.
+
+Every CSV, whether on its own or inside the zip, is **one row per change**,
+which is what makes it answer *what changed where*:
 
 | column | what it holds |
 | --- | --- |
@@ -242,14 +252,17 @@ review recorded before this tool kept locations, for one whose detail has aged
 out of the file, and for one the server had to work out from the two files
 alone. Either way the counts are right; only the position is missing.
 
-JSON gives the log exactly as the clip files store it, for anything that would
-rather parse than read. The same URLs work outside the app:
+The same URLs work outside the app:
 
 ```
-curl -o log.csv "http://localhost:9044/api/reviews?format=csv"
-curl -o one.csv "http://localhost:9044/api/reviews?format=csv&clip=My%20Clip.mp4"
-curl        "http://localhost:9044/api/reviews?format=json&download=0"
+curl -o logs.zip "http://localhost:9044/api/reviews?format=zip"
+curl -o log.csv  "http://localhost:9044/api/reviews?format=csv"
+curl -o one.csv  "http://localhost:9044/api/reviews?format=csv&clip=My%20Clip.mp4"
+curl         "http://localhost:9044/api/reviews?format=json&download=0"
 ```
+
+Add `&clip=<name>` to any of them for a single video; `&download=0` to read it
+in a browser tab instead of saving it.
 
 ### Keyboard
 
