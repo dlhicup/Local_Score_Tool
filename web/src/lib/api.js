@@ -76,6 +76,22 @@ export const api = {
   // `review`, on a save made from the review page, says what the review
   // changed so the server can record it on the clip. Omitted otherwise, which
   // is what tells the server this was ordinary annotating.
+  /**
+   * A link the browser downloads the review log from.
+   *
+   * A plain href rather than a fetch-and-blob: the server already names the
+   * file and sets the disposition, the whole table never has to sit in memory,
+   * and the download survives the page being navigated away from.
+   */
+  reviewLogUrl: ({ clip = null, format = 'csv' } = {}) => {
+    const q = new URLSearchParams({ format });
+    if (clip) q.set('clip', clip);
+    return `${BASE}/reviews?${q.toString()}`;
+  },
+
+  /** How much there is to download, so a button can say so. */
+  reviewLogSummary: () => request('/reviews/summary'),
+
   // Drops the reviewed mark on its own, without writing the actions — so a
   // reviewer holding unsaved edits does not have them saved as a side effect.
   clearReviewed: (id) => request(`/projects/${encodeURIComponent(id)}/reviewed`, { method: 'DELETE' }),

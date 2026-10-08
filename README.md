@@ -209,6 +209,48 @@ Either way only the mark goes. The actions are not rewritten, and if you are
 holding unsaved edits when you unmark, they stay unsaved — unmarking is not a
 back door to saving them.
 
+### Downloading the review log
+
+**Review log · CSV / JSON** in the Library header downloads the history of
+every clip at once. The review panel has a **CSV** link for the open clip on
+its own.
+
+The CSV is **one row per change**, which is what makes it answer *what changed
+where*:
+
+| column | what it holds |
+| --- | --- |
+| `clip`, `file`, `annotator` | which clip, which file under `groundtruth/`, whose hand-in |
+| `reviewed_at`, `reviewed_by` | the clip's sign-off, if it has one |
+| `review_at`, `review_by`, `review_index` | which review this row belongs to |
+| `actions_before`, `actions_after` | the clip's action count either side of it |
+| `change` | `added` · `removed` · `retimed` · `retagged` |
+| `action` | the label involved |
+| `frame`, `time`, `mmss` | **where** — the frame on the 25 fps clock, and the same instant in seconds and `m:ss.ss` |
+| `from_frame`, `from_time` | for a retime, where the action was before |
+| `tags_changed` | for a retag, which tags: `team` `sure` `body` `goal` `ball` `og` |
+| `detail` | `exact` when the row is one change, `summary` when it is a count |
+| `count` | 1 on an exact row; the tally on a summary row |
+
+Sort by `clip` and `frame` and you have the corrections in the order the clip
+plays. Filter `change = removed` and you have everything a reviewer threw out,
+with the frame to check it at.
+
+`detail` matters if you add the numbers up. An **exact** row is one change at a
+known frame. A **summary** row is a count with no frame, which happens for a
+review recorded before this tool kept locations, for one whose detail has aged
+out of the file, and for one the server had to work out from the two files
+alone. Either way the counts are right; only the position is missing.
+
+JSON gives the log exactly as the clip files store it, for anything that would
+rather parse than read. The same URLs work outside the app:
+
+```
+curl -o log.csv "http://localhost:9044/api/reviews?format=csv"
+curl -o one.csv "http://localhost:9044/api/reviews?format=csv&clip=My%20Clip.mp4"
+curl        "http://localhost:9044/api/reviews?format=json&download=0"
+```
+
 ### Keyboard
 
 | key | action |
@@ -397,7 +439,8 @@ carry two more keys, both optional:
   "annotator": "Dmytro",
   "reviewed": {"by": "ana", "at": "2026-10-01T06:25:02.880Z", "actions": 183},
   "reviews": [
-    {"at":"2026-10-01T06:23:20.244Z","by":"ana","before":181,"after":183,"added":{"pass":3},"removed":{"tackle":1},"retimed":4,"retagged":7}
+    {"at":"2026-10-01T06:23:20.244Z","by":"ana","before":181,"after":183,"added":{"pass":1},"removed":{"tackle":1},"retimed":1,"retagged":1,
+     "changes":[{"c":"tag","a":"pass","f":25,"k":["team"]},{"c":"del","a":"tackle","f":70},{"c":"time","a":"shot","f":102,"f0":100},{"c":"add","a":"pass","f":120}]}
   ],
   "groundtruth": [ … ]
 }
@@ -416,8 +459,31 @@ and `after` are total action counts; `added` and `removed` are per label, and
 for every label `before + added - removed` equals `after`. `retimed` and
 `retagged` count actions that survived the review but moved frame or changed a
 tag. A `"derived": true` entry means the reviewer's own account of the edit did
-not add up and the counts were taken from the two files instead. The last 50
-entries are kept.
+not add up and the counts were taken from the two files instead.
+
+`changes` says **where** each of those changes happened — one record per change,
+in clip order, with short keys because the log sits above the actions in the
+same file:
+
+| key | meaning |
+| --- | --- |
+| `c` | `add` · `del` · `time` · `tag` |
+| `a` | the action's label |
+| `f` | the frame, on the 25 fps reporting clock |
+| `f0` | for `time`, the frame it moved from |
+| `k` | for `tag`, which tags changed |
+
+Relabelling an action is a `del` of the old label and an `add` of the new one
+at the same frame, matching how the counts treat it. The records have to
+account for exactly the counts beside them or they are not written at all — a
+log that says where is only worth having if the where cannot contradict the
+how many — which is also why a `derived` entry never carries them.
+
+The log is bounded, because the file is the deliverable: the last **50**
+entries are kept, each with at most **500** change records (`changesOmitted`
+says how many were left out), and only the newest **10** entries keep their
+records at all. Older entries keep their counts, so the totals never change —
+they just stop saying where.
 
 That is what makes reviewing someone else's work a copy: **drop their
 `<clip name>.json` anywhere under `groundtruth/`, put the clip in `video/`,

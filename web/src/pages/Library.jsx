@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Search, CheckCircle2, Circle, Film,
   ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2, Trash2, X,
+  Download,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { api } from '../lib/api';
@@ -239,10 +240,15 @@ export default function Library() {
     }
   };
 
+  // How many reviews are on record across the corpus, so the download button
+  // can say what it would give you — or say that there is nothing yet.
+  const [logs, setLogs] = useState(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setData(await api.listVideos());
+      api.reviewLogSummary().then(setLogs).catch(() => setLogs(null));
     } catch (err) {
       // A 401 already routes to sign-in; a toast on top is just noise.
       if (!err.silent && err.status !== 401) toast(err.message, 'error');
@@ -341,6 +347,46 @@ export default function Library() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* The review log, as a file. Plain links, so the browser downloads
+                them the way it downloads anything else. Disabled rather than
+                hidden when nothing has been reviewed yet: the absence of a
+                control is not an answer to "where are the logs". */}
+            <div
+              className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/[0.03] p-0.5"
+              title={
+                logs?.reviews
+                  ? `${logs.reviews} review${logs.reviews === 1 ? '' : 's'} across ${logs.clips} clip${logs.clips === 1 ? '' : 's'}`
+                    + `${logs.changes ? `, ${logs.changes} recorded changes` : ''} — one row per change`
+                  : 'No reviews recorded yet. Open a clip with Review, change something, and save.'
+              }
+            >
+              <span className="pl-2 pr-1 text-2xs font-semibold uppercase tracking-wider text-ink-500">
+                Review log
+              </span>
+              {logs?.reviews ? (
+                <>
+                  <a
+                    href={api.reviewLogUrl({ format: 'csv' })}
+                    download
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:bg-white/10 hover:text-white"
+                    title="Every change, one row each: clip, reviewer, what changed, and the frame it happened on"
+                  >
+                    <Download size={12} /> CSV
+                  </a>
+                  <a
+                    href={api.reviewLogUrl({ format: 'json' })}
+                    download
+                    className="rounded-md px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:bg-white/10 hover:text-white"
+                    title="The log exactly as the clip files store it"
+                  >
+                    JSON
+                  </a>
+                </>
+              ) : (
+                <span className="cursor-not-allowed px-2 py-1 text-2xs font-semibold text-ink-700">none yet</span>
+              )}
+            </div>
+
             <button onClick={() => fileInput.current?.click()} disabled={!!uploading} className="btn-ghost text-xs" title="Add a video to the shared folder">
               {uploading ? <><Loader2 size={15} className="animate-spin" /> {uploading.pct}%</> : <><Upload size={15} /> Import video</>}
             </button>

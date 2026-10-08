@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { ClipboardList, Plus, Minus, Move, Tag, CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import { ClipboardList, Plus, Minus, Move, Tag, CheckCircle2, Loader2, XCircle, Download } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { reviewDiff, tallyTotal } from '../lib/review';
 import { LABEL_META, labelTitle } from '../lib/labels';
 import { relativeTime } from '../lib/format';
+import { api } from '../lib/api';
 
 /**
  * What this review has changed so far, beside the picture.
@@ -56,6 +57,7 @@ export default function ReviewChanges() {
   const baseline = useStore((s) => s.reviewBaseline);
   const priorCount = useStore((s) => s.project?.meta?.reviews?.length ?? 0);
   const reviewed = useStore((s) => s.project?.meta?.reviewed ?? null);
+  const clip = useStore((s) => s.project?.video?.filename ?? null);
   const finishReview = useStore((s) => s.finishReview);
   const clearReviewed = useStore((s) => s.clearReviewed);
   const [finishing, setFinishing] = useState(false);
@@ -176,8 +178,18 @@ export default function ReviewChanges() {
         )}
 
         {priorCount > 0 && (
-          <p className="mt-1.5 text-2xs text-ink-600">
-            {priorCount} earlier review{priorCount === 1 ? '' : 's'} on record.
+          <p className="mt-1.5 flex items-center gap-1.5 text-2xs text-ink-600">
+            <span>{priorCount} earlier review{priorCount === 1 ? '' : 's'} on record.</span>
+            {clip && (
+              <a
+                href={api.reviewLogUrl({ clip, format: 'csv' })}
+                download
+                title="Download this clip's review log: every change and the frame it happened on"
+                className="inline-flex items-center gap-1 font-semibold text-ink-400 underline decoration-dotted transition hover:text-pitch-400"
+              >
+                <Download size={10} /> CSV
+              </a>
+            )}
           </p>
         )}
       </div>

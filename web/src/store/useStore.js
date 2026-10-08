@@ -238,7 +238,13 @@ export const useStore = create((set, get) => ({
         project.id,
         { ...project, events },
         diff && diff.touched
-          ? { added: diff.added, removed: diff.removed, retimed: diff.retimed, retagged: diff.retagged }
+          ? {
+            added: diff.added,
+            removed: diff.removed,
+            retimed: diff.retimed,
+            retagged: diff.retagged,
+            changes: diff.changes,
+          }
           : null,
         finish,
       );

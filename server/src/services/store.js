@@ -8,7 +8,7 @@ import {
   findGroundTruth, groundTruthIndex, toFrame, GT_DIR,
 } from './gtfile.js';
 import { probeVideo } from './media.js';
-import { REVIEW_LOG_MAX } from './reviewlog.js';
+import { pruneLog } from './reviewlog.js';
 import { sweepTempFiles } from './atomic.js';
 
 /**
@@ -265,7 +265,7 @@ export async function writeProject(project, { appendReview = null, reviewed } = 
 
   if (appendReview) {
     const log = Array.isArray(existing.reviews) ? existing.reviews.filter((x) => x && typeof x === 'object') : [];
-    extra.reviews = [...log, appendReview].slice(-REVIEW_LOG_MAX);
+    extra.reviews = pruneLog([...log, appendReview]);
   }
 
   if (reviewed !== undefined) {
