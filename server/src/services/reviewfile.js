@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { GT_DIR, findGroundTruth, fileFor } from './gtfile.js';
 import { writeFileAtomic } from './atomic.js';
+import { EVENT_LABELS } from '../labels.js';
 
 /**
  * A clip's review history, in its own file.
@@ -13,12 +14,13 @@ import { writeFileAtomic } from './atomic.js';
  * brings its history along, which is the whole reason this project keeps one
  * file per clip.
  *
- * The history is written as sentences. It exists to be read by a person asking
- * what a reviewer changed, so that is what it says, in those words, with the
- * frame to go and look at.
+ * One flat list of changes, not one block per save. Everybody reviewing here is
+ * the same person, so splitting the list by who did it and in which sitting
+ * divided it along the one axis nobody needs, and buried the thing people
+ * actually want: the corrections, in the order the clip plays, so they can be
+ * walked through against the video.
  */
 
-/** `Review.` + the clip's name. Case-insensitive, since Windows is. */
 const PREFIX = 'Review.';
 export const isReviewFileName = (basename) =>
   String(basename ?? '').toLowerCase().startsWith(PREFIX.toLowerCase());
@@ -36,7 +38,6 @@ const clipBase = (videoName) => path.basename(String(videoName ?? '')).replace(/
 /**
  * Where a clip's review file goes: next to its ground truth, wherever that
  * lies, so a hand-in kept in a subfolder keeps its history in the same place.
- * A clip with no ground truth yet gets one at the top of groundtruth/.
  */
 export async function reviewPathFor(videoName) {
   const base = clipBase(videoName);
@@ -48,80 +49,153 @@ export async function reviewPathFor(videoName) {
   return full.startsWith(GT_DIR + path.sep) ? full : null;
 }
 
-const empty = (videoName) => ({ clip: clipBase(videoName), reviews: [], signedOff: null });
+const emptyDoc = (videoName) => ({
+  clip: clipBase(videoName),
+  reviews: 0,
+  actions: null,
+  totals: { added: {}, removed: {}, retimed: 0, retagged: 0 },
+  changes: [],
+  notes: [],
+  signedOff: null,
+});
+
+const asObj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+const asArr = (v) => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : []);
+const asNum = (v) => (Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0);
 
 /** A clip's review file, or an empty one. Never throws: this runs on page load. */
 export async function readReviewFile(videoName) {
   const target = await reviewPathFor(videoName);
-  if (!target) return empty(videoName);
-  let doc;
+  if (!target) return emptyDoc(videoName);
   try {
-    doc = JSON.parse(await fs.readFile(target, 'utf8'));
+    return normalise(JSON.parse(await fs.readFile(target, 'utf8')), videoName);
   } catch {
-    return empty(videoName);
+    return emptyDoc(videoName);
   }
+}
+
+function normalise(doc, videoName) {
+  const totals = asObj(doc?.totals);
   return {
     clip: typeof doc?.clip === 'string' ? doc.clip : clipBase(videoName),
-    reviews: Array.isArray(doc?.reviews) ? doc.reviews.filter((x) => x && typeof x === 'object') : [],
+    summary: typeof doc?.summary === 'string' ? doc.summary : null,
+    reviews: asNum(doc?.reviews),
+    actions: doc?.actions && typeof doc.actions === 'object'
+      ? { first: asNum(doc.actions.first), now: asNum(doc.actions.now) }
+      : null,
+    totals: {
+      added: asObj(totals.added),
+      removed: asObj(totals.removed),
+      retimed: asNum(totals.retimed),
+      retagged: asNum(totals.retagged),
+    },
+    changes: asArr(doc?.changes),
+    notes: Array.isArray(doc?.notes) ? doc.notes.filter((x) => typeof x === 'string') : [],
     signedOff: doc?.signedOff && typeof doc.signedOff === 'object' ? doc.signedOff : null,
-    // Anything a later version adds is read back and written out again.
-    ...(doc && typeof doc === 'object' ? extraKeys(doc) : {}),
   };
 }
 
-/** Whatever else the file carries, so a save never drops it. */
-function extraKeys(doc) {
-  const { clip, reviews, signedOff, ...rest } = doc;
-  return rest;
+/** How many changes a file keeps. Generous: it is no longer part of the hand-off. */
+export const CHANGES_MAX = 20000;
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const tallyTotal = (o) => Object.values(o ?? {}).reduce((n, v) => n + asNum(v), 0);
+
+/** One line describing everything the clip has been through. */
+function summarise(doc) {
+  const { added, removed, retimed, retagged } = doc.totals;
+  const bits = [];
+  if (tallyTotal(added)) bits.push(`${tallyTotal(added)} added`);
+  if (tallyTotal(removed)) bits.push(`${tallyTotal(removed)} removed`);
+  if (retimed) bits.push(`${retimed} retimed`);
+  if (retagged) bits.push(`${retagged} re-tagged`);
+
+  const over = doc.reviews > 1 ? ` over ${plural(doc.reviews, 'review')}` : '';
+  const head = doc.actions
+    ? (doc.actions.first === doc.actions.now
+      ? `${doc.actions.now} actions, unchanged in number${over}`
+      : `${doc.actions.first} actions became ${doc.actions.now}${over}`)
+    : `Reviewed${over || ' once'}`;
+  return bits.length ? `${head}: ${bits.join(', ')}.` : `${head}.`;
 }
 
-/**
- * How many entries a file keeps. Generous because this file is no longer part
- * of the hand-off, so its size costs nothing but disk.
- */
-export const REVIEW_LOG_MAX = 500;
+const orderTally = (o) => {
+  const out = {};
+  for (const l of EVENT_LABELS) if (asNum(o[l])) out[l] = asNum(o[l]);
+  return out;
+};
 
 /**
  * Write the file out, or delete it when there is nothing left to say.
  *
  * One change per line: the sentences are the point of the file, and a reader
- * scrolling it should get one per line rather than a reflowed block.
+ * scrolling it wants one per line rather than a reflowed block.
  */
 async function persist(videoName, doc) {
   const target = await reviewPathFor(videoName);
   if (!target) return null;
 
-  if (!doc.reviews.length && !doc.signedOff) {
+  if (!doc.changes.length && !doc.notes.length && !doc.signedOff && !doc.reviews) {
     await fs.unlink(target).catch((e) => { if (e.code !== 'ENOENT') throw e; });
     return { path: target, removed: true };
   }
 
-  const { clip, reviews, signedOff, ...rest } = doc;
-  const head = [`  "clip": ${JSON.stringify(clip)}`];
-  if (signedOff) head.push(`  "signedOff": ${JSON.stringify(signedOff)}`);
-  for (const [k, v] of Object.entries(rest)) head.push(`  ${JSON.stringify(k)}: ${JSON.stringify(v)}`);
+  // Clip order, so the list reads the way the clip plays. A change recorded
+  // later but earlier in the clip belongs where a reader would look for it.
+  doc.changes.sort((a, b) => asNum(a.frame) - asNum(b.frame));
+  doc.totals.added = orderTally(doc.totals.added);
+  doc.totals.removed = orderTally(doc.totals.removed);
 
-  const entries = reviews.slice(-REVIEW_LOG_MAX).map((r) => {
-    const { changes, ...meta } = r;
-    const lines = Object.entries(meta).map(([k, v]) => `      ${JSON.stringify(k)}: ${JSON.stringify(v)}`);
-    const list = Array.isArray(changes) && changes.length
-      ? `[\n${changes.map((c) => `        ${JSON.stringify(c)}`).join(',\n')}\n      ]`
-      : '[]';
-    lines.push(`      "changes": ${list}`);
-    return `    {\n${lines.join(',\n')}\n    }`;
-  });
+  const head = [
+    `  "clip": ${JSON.stringify(doc.clip)}`,
+    `  "summary": ${JSON.stringify(summarise(doc))}`,
+    `  "reviews": ${doc.reviews}`,
+  ];
+  if (doc.actions) head.push(`  "actions": ${JSON.stringify(doc.actions)}`);
+  head.push(`  "totals": ${JSON.stringify(doc.totals)}`);
+  if (doc.signedOff) head.push(`  "signedOff": ${JSON.stringify(doc.signedOff)}`);
+  if (doc.notes.length) {
+    head.push(`  "notes": [\n${doc.notes.map((n) => `    ${JSON.stringify(n)}`).join(',\n')}\n  ]`);
+  }
 
-  const body = `{\n${head.join(',\n')},\n  "reviews": [\n${entries.join(',\n')}\n  ]\n}\n`;
+  const kept = doc.changes.slice(-CHANGES_MAX);
+  const list = kept.length
+    ? `[\n${kept.map((c) => `    ${JSON.stringify(c)}`).join(',\n')}\n  ]`
+    : '[]';
+
+  const body = `{\n${head.join(',\n')},\n  "changes": ${list}\n}\n`;
   await fs.mkdir(path.dirname(target), { recursive: true });
   await writeFileAtomic(target, body);
-  return { path: target, count: doc.reviews.length };
+  return { path: target, count: kept.length };
 }
 
-/** Add one review to a clip's history. */
+/**
+ * Fold one review into the clip's history.
+ *
+ * `entry` is what reviewlog.js produced: the changes as sentences, the counts
+ * behind them, and a note when there was nothing locatable to record.
+ */
 export async function appendReview(videoName, entry) {
   if (!entry) return null;
   const doc = await readReviewFile(videoName);
-  doc.reviews = [...doc.reviews, entry];
+
+  doc.reviews += 1;
+  const before = asNum(entry.counts?.before);
+  const now = asNum(entry.counts?.after);
+  doc.actions = { first: doc.actions ? doc.actions.first : before, now };
+
+  for (const [label, n] of Object.entries(asObj(entry.counts?.added))) {
+    doc.totals.added[label] = asNum(doc.totals.added[label]) + asNum(n);
+  }
+  for (const [label, n] of Object.entries(asObj(entry.counts?.removed))) {
+    doc.totals.removed[label] = asNum(doc.totals.removed[label]) + asNum(n);
+  }
+  doc.totals.retimed += asNum(entry.counts?.retimed);
+  doc.totals.retagged += asNum(entry.counts?.retagged);
+
+  doc.changes = [...doc.changes, ...(entry.changes ?? [])];
+  if (entry.note) doc.notes = [...doc.notes, entry.note];
+
   return persist(videoName, doc);
 }
 
@@ -132,10 +206,10 @@ export async function setSignedOff(videoName, value) {
   return persist(videoName, doc);
 }
 
-/** Just the two things a listing needs, without reading the whole history. */
+/** Just what a listing needs, without carrying the whole history around. */
 export async function reviewStatus(videoName) {
   const doc = await readReviewFile(videoName);
-  return { signedOff: doc.signedOff, reviewCount: doc.reviews.length };
+  return { signedOff: doc.signedOff, reviewCount: doc.reviews, changeCount: doc.changes.length };
 }
 
 /**
@@ -156,13 +230,10 @@ export async function reviewFileIndex() {
       else if (e.isFile() && e.name.toLowerCase().endsWith('.json') && isReviewFileName(e.name)) {
         const clip = clipForReviewFile(e.name);
         if (!clip) continue;
-        const key = clip.toLowerCase();
-        // Shallowest wins, as with ground truth, so the answer never depends on
-        // the order the filesystem happened to return.
         const rel = path.relative(GT_DIR, full);
-        const existing = out.get(key);
+        const existing = out.get(clip.toLowerCase());
         if (!existing || rel.split(path.sep).length < existing.rel.split(path.sep).length) {
-          out.set(key, { clip, path: full, rel });
+          out.set(clip.toLowerCase(), { clip, path: full, rel });
         }
       }
     }
@@ -174,12 +245,7 @@ export async function reviewFileIndex() {
 /** Read a review file by its own path, for listings that already found it. */
 export async function readReviewFileAt(full) {
   try {
-    const doc = JSON.parse(await fs.readFile(full, 'utf8'));
-    return {
-      clip: typeof doc?.clip === 'string' ? doc.clip : clipForReviewFile(path.basename(full)),
-      reviews: Array.isArray(doc?.reviews) ? doc.reviews.filter((x) => x && typeof x === 'object') : [],
-      signedOff: doc?.signedOff && typeof doc.signedOff === 'object' ? doc.signedOff : null,
-    };
+    return normalise(JSON.parse(await fs.readFile(full, 'utf8')), path.basename(full).slice(PREFIX.length));
   } catch {
     return null;
   }

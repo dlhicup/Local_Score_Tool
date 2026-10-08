@@ -239,18 +239,15 @@ header:
 | **CSV** | one spreadsheet covering every clip, for sorting the whole corpus in one sheet |
 | **JSON** | the log as the files store it |
 
-The text form is the log as it is written: a header per clip, then a block per
-review, then one sentence per change.
+The text form is the log as it is written: a short header, then every
+correction in the order the clip plays.
 
 ```
 Review log — Veo U19 Sl Gw18 Paok-Volos 3-0 Cut
 Annotated by Tillottoma
-1924 actions in the ground truth now
-Signed off by local on 2026-10-06 05:41
-
-----------------------------------------------------------------------
-Review 1 — 2026-10-06 03:57 by local
-1924 actions became 1921: 1 action added, 4 actions removed, 1 action re-tagged.
+1921 actions in the ground truth now
+1924 actions became 1921 over 3 reviews: 1 added, 4 removed, 1 re-tagged.
+Signed off on 2026-10-06 05:41
 
   - At frame 25 (0:01.00), the pass action's team was updated from Team A to Team B.
   - At frame 70 (0:02.80), the tackle was removed.
@@ -259,6 +256,12 @@ Review 1 — 2026-10-06 03:57 by local
   - At frame 150 (0:06.00), the action was clearance, but it was updated to block.
 ```
 
+One list, not one block per save. Everybody reviewing here is the same person,
+so splitting the history by who did it and in which sitting divided it along
+the one axis nobody needs, and put a heading between two corrections a second
+apart. Reviewing the same clip three times adds to the one list; the clip
+reads top to bottom.
+
 The CSV says the same thing, one row per change, with the sentence in a
 `change` column and the rest broken out so a spreadsheet can sort and total it:
 
@@ -266,14 +269,13 @@ The CSV says the same thing, one row per change, with the sentence in a
 | --- | --- |
 | `change` | **the sentence** — the whole point of the row |
 | `clip`, `annotator` | which clip, and whose hand-in it was |
-| `review_at`, `review_by`, `review_no` | which review this row belongs to |
-| `summary` | that review's one-line headline, repeated on each of its rows |
 | `kind` | `added` · `removed` · `relabelled` · `retimed` · `re-tagged` · `note` |
 | `action` | the label involved — the *new* label, for a relabel |
 | `frame`, `time` | **where** — the frame on the 25 fps clock, and `m:ss.ss` |
 | `was_action` | for a relabel, the label it used to be |
 | `from_frame`, `from_time` | for a retime, where the action was before |
 | `tags` | for a re-tag, which tags moved |
+| `recorded_at` | when the review that made this change was saved |
 | `signed_off_by`, `signed_off_at` | the clip's sign-off, if it has one |
 | `actions_now` | how many actions the ground truth holds today |
 | `log_file` | which `Review.<clip>.json` the row came from |
@@ -282,10 +284,12 @@ Sort by `clip` and `frame` and you have the corrections in the order the clip
 plays. Filter `kind = removed` and you have everything a reviewer threw out,
 with the frame to go and check it at.
 
-A row whose `kind` is `note` has no frame: it stands in for a review whose
-individual changes were never recorded — one made before the log kept track of
-where, or one the server had to work out by comparing the file before and after.
-Its `summary` and counts are still right; only the positions are missing.
+A row whose `kind` is `note` has no frame. It stands in for changes that were
+never recorded individually — from a review made before the log kept track of
+where, or one the server had to work out by comparing the file before and
+after. The counts in the header are still right; only the positions are
+missing, and the note says how many are unaccounted for so a total taken from
+the rows is never silently short.
 
 The same URLs work outside the app:
 
@@ -504,30 +508,37 @@ its history along — the same reason this project keeps one file per clip.
 ```json
 {
   "clip": "Veo U19 Sl Gw18 Paok-Volos 3-0 Cut",
-  "signedOff": {"by": "ana", "at": "2026-10-06T05:41:13.734Z", "actions": 1924},
-  "reviews": [
-    {
-      "at": "2026-10-06T03:57:07.815Z",
-      "by": "ana",
-      "summary": "1924 actions became 1921: 1 action added, 4 actions removed.",
-      "counts": {"before":1924,"after":1921,"added":{"clearance":1},"removed":{"pass":1,"pass_received":2,"clearance":1}},
-      "changes": [
-        {"text":"At frame 70 (0:02.80), the tackle was removed.","kind":"removed","action":"tackle","frame":70,"time":"0:02.80"},
-        {"text":"At frame 150 (0:06.00), the action was clearance, but it was updated to block.","kind":"relabelled","action":"block","frame":150,"time":"0:06.00","wasAction":"clearance"}
-      ]
-    }
+  "summary": "1924 actions became 1921 over 3 reviews: 1 added, 4 removed, 1 re-tagged.",
+  "reviews": 3,
+  "actions": {"first":1924,"now":1921},
+  "totals": {"added":{"clearance":1},"removed":{"pass":1,"pass_received":2,"clearance":1},"retimed":0,"retagged":1},
+  "signedOff": {"by": "local", "at": "2026-10-06T05:41:13.734Z", "actions": 1921},
+  "changes": [
+    {"text":"At frame 70 (0:02.80), the tackle was removed.","kind":"removed","action":"tackle","frame":70,"time":"0:02.80","at":"2026-10-06T03:57:07.815Z"},
+    {"text":"At frame 150 (0:06.00), the action was clearance, but it was updated to block.","kind":"relabelled","action":"block","frame":150,"time":"0:06.00","wasAction":"clearance","at":"2026-10-06T04:02:11.004Z"}
   ]
 }
 ```
 
+`changes` is **one flat list**, in clip order, however many reviews it took.
+`reviews` counts the saves, `actions` the action count when the clip was first
+reviewed and now, `totals` the per-label change across all of them, and
+`summary` says the same thing in a line.
+
 Each change is **a sentence first**. `text` is what it is for; `kind`, `action`,
 `frame`, `time` and the rest are the same thing as columns, for anything that
 would rather sort than read. A re-tag adds `tags`; a retime adds `fromFrame`
-and `fromTime`; a relabel adds `wasAction`.
+and `fromTime`; a relabel adds `wasAction`. `at` is the save it came from —
+there is no name on each change, because one person does all the reviewing
+here and a column of the same word is not information.
 
 Relabelling reads as one sentence — *"the action was A, but it was updated to
 B"* — while counting as one removed and one added, which is what it is in
 label-count terms.
+
+A `notes` array appears when some changes could not be recorded individually,
+saying how many and why, so the totals never look larger than the list without
+explanation.
 
 `signedOff` is the sign-off: the clip has been reviewed and nothing has changed
 since. **Finish review** writes it, any save that changes the actions deletes
@@ -536,11 +547,10 @@ presence is a claim about the ground truth as it stands, not a record that
 somebody once looked at the clip. The Library reads it to show **Reviewed**
 instead of **Review**.
 
-`counts` is kept beside each summary for anything adding the log up. For every
-label `before + added - removed` equals `after`. A `"derived": true` means the
-reviewer's own account of the edit did not add up and the counts were taken by
-comparing the file before and after instead; such an entry carries no sentences,
-because there was nothing trustworthy to write.
+A review whose account of the edit does not add up against the file is counted
+but not listed: the counts are taken by comparing the file before and after
+instead, and a note says so. There was nothing trustworthy to turn into
+sentences.
 
 **The sentences are written by the server**, from structured records the browser
 sends, and only once those records account for exactly the counts the server

@@ -31,7 +31,7 @@ async function collect(onlyClip = null) {
   for (const [key, entry] of reviewFiles) {
     if (onlyClip && key !== onlyClip.toLowerCase()) continue;
     const doc = await readReviewFileAt(entry.path);
-    if (!doc || (!doc.reviews.length && !doc.signedOff)) continue;
+    if (!doc || (!doc.changes.length && !doc.notes.length && !doc.signedOff)) continue;
 
     let annotator = null;
     let actions = null;
@@ -56,6 +56,10 @@ async function collect(onlyClip = null) {
       actions,
       signedOff: doc.signedOff,
       reviews: doc.reviews,
+      summary: doc.summary ?? null,
+      totals: doc.totals,
+      changes: doc.changes,
+      notes: doc.notes,
     });
   }
   out.sort((a, b) => a.clip.localeCompare(b.clip));
@@ -72,9 +76,9 @@ const esc = (v) => {
  * follow for anything that wants to sort or total them.
  */
 const COLUMNS = [
-  'clip', 'annotator', 'review_at', 'review_by', 'review_no', 'summary',
-  'change', 'kind', 'action', 'frame', 'time', 'was_action', 'from_frame', 'from_time', 'tags',
-  'signed_off_by', 'signed_off_at', 'actions_now', 'log_file',
+  'clip', 'change', 'kind', 'action', 'frame', 'time',
+  'was_action', 'from_frame', 'from_time', 'tags', 'recorded_at',
+  'annotator', 'signed_off_by', 'signed_off_at', 'actions_now', 'log_file',
 ];
 
 function toRows(clips) {
@@ -88,36 +92,27 @@ function toRows(clips) {
       actions_now: c.actions,
       log_file: c.logFile,
     };
-    if (!c.reviews.length) {
-      rows.push({ ...base, change: 'Signed off with no review on record.', kind: 'note' });
-      continue;
-    }
-    c.reviews.forEach((r, i) => {
-      const head = {
+    for (const x of c.changes) {
+      rows.push({
         ...base,
-        review_at: r.at ?? '',
-        review_by: r.by ?? '',
-        review_no: i + 1,
-        summary: r.summary ?? '',
-      };
-      const changes = Array.isArray(r.changes) && r.changes.length
-        ? r.changes
-        : [{ text: r.summary ?? '', kind: 'note' }];
-      for (const x of changes) {
-        rows.push({
-          ...head,
-          change: x.text ?? '',
-          kind: x.kind ?? '',
-          action: x.action ?? '',
-          frame: x.frame ?? '',
-          time: x.time ?? '',
-          was_action: x.wasAction ?? '',
-          from_frame: x.fromFrame ?? '',
-          from_time: x.fromTime ?? '',
-          tags: x.tags ?? '',
-        });
-      }
-    });
+        change: x.text ?? '',
+        kind: x.kind ?? '',
+        action: x.action ?? '',
+        frame: x.frame ?? '',
+        time: x.time ?? '',
+        was_action: x.wasAction ?? '',
+        from_frame: x.fromFrame ?? '',
+        from_time: x.fromTime ?? '',
+        tags: x.tags ?? '',
+        recorded_at: x.at ?? '',
+      });
+    }
+    // Whatever could not be recorded, so a total taken from this is not
+    // silently short.
+    for (const n of c.notes) rows.push({ ...base, change: n, kind: 'note' });
+    if (!c.changes.length && !c.notes.length) {
+      rows.push({ ...base, change: 'Signed off with no review on record.', kind: 'note' });
+    }
   }
   return rows;
 }
@@ -129,27 +124,32 @@ const toCsv = (rows) =>
  * One clip's history as plain text — the sentences and nothing else. This is
  * the form the log was asked for: openable, readable, no decoding.
  */
+/**
+ * One clip's history as plain text: a short header, then every correction in
+ * the order the clip plays. Not split by sitting — the corrections are what
+ * somebody walks through against the video, and chopping them into blocks put
+ * a heading between two changes a second apart.
+ */
 function toText(c) {
   const lines = [`Review log — ${c.clip}`];
   if (c.annotator) lines.push(`Annotated by ${c.annotator}`);
   if (c.actions !== null) lines.push(`${c.actions} actions in the ground truth now`);
+  if (c.summary) lines.push(c.summary);
   if (c.signedOff) {
-    lines.push(`Signed off by ${c.signedOff.by ?? 'unknown'} on ${String(c.signedOff.at ?? '').slice(0, 16).replace('T', ' ')}`);
+    lines.push(`Signed off on ${String(c.signedOff.at ?? '').slice(0, 16).replace('T', ' ')}`);
   } else {
     lines.push('Not signed off');
   }
   lines.push('');
-  if (!c.reviews.length) lines.push('No reviews on record.');
-  c.reviews.forEach((r, i) => {
-    lines.push(`${'-'.repeat(70)}`);
-    lines.push(`Review ${i + 1} — ${String(r.at ?? '').slice(0, 16).replace('T', ' ')} by ${r.by ?? 'unknown'}`);
-    if (r.summary) lines.push(r.summary);
+
+  if (!c.changes.length && !c.notes.length) {
+    lines.push('No reviews on record.');
+  }
+  for (const x of c.changes) lines.push(`  - ${x.text ?? ''}`);
+  if (c.notes.length) {
     lines.push('');
-    for (const x of Array.isArray(r.changes) ? r.changes : []) {
-      lines.push(`  - ${x.text ?? ''}`);
-    }
-    lines.push('');
-  });
+    for (const n of c.notes) lines.push(`  (${n})`);
+  }
   return lines.join('\r\n');
 }
 
@@ -163,11 +163,8 @@ function indexCsv(clips, names) {
     clip: c.clip,
     annotator: c.annotator,
     actions_now: c.actions,
-    reviews: c.reviews.length,
-    changes_recorded: c.reviews.reduce(
-      (n, r) => n + (Array.isArray(r.changes) ? r.changes.filter((x) => x.kind && x.kind !== 'note').length : 0),
-      0,
-    ),
+    reviews: c.reviews,
+    changes_recorded: c.changes.length,
     signed_off_by: c.signedOff?.by ?? '',
     signed_off_at: c.signedOff?.at ?? '',
     log_file: names[i],
@@ -245,7 +242,8 @@ router.get('/reviews', requireAuth, async (req, res, next) => {
       clips,
       totals: {
         clips: clips.length,
-        reviews: clips.reduce((n, c) => n + c.reviews.length, 0),
+        reviews: clips.reduce((n, c) => n + c.reviews, 0),
+        changes: clips.reduce((n, c) => n + c.changes.length, 0),
         signedOff: clips.filter((c) => c.signedOff).length,
       },
     }, null, 2));
@@ -260,14 +258,8 @@ router.get('/reviews/summary', requireAuth, async (_req, res, next) => {
     const clips = await collect();
     res.json({
       clips: clips.length,
-      reviews: clips.reduce((n, c) => n + c.reviews.length, 0),
-      changes: clips.reduce(
-        (n, c) => n + c.reviews.reduce(
-          (m, r) => m + (Array.isArray(r.changes) ? r.changes.filter((x) => x.kind && x.kind !== 'note').length : 0),
-          0,
-        ),
-        0,
-      ),
+      reviews: clips.reduce((n, c) => n + c.reviews, 0),
+      changes: clips.reduce((n, c) => n + c.changes.length, 0),
       signedOff: clips.filter((c) => c.signedOff).length,
     });
   } catch (err) {

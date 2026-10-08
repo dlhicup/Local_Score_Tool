@@ -54,6 +54,9 @@ const at = (f) => `frame ${f} (${clock(f)})`;
 /** An article that reads right before a label. */
 const article = (label) => (/^[aeiou]/.test(label) ? 'an' : 'a');
 
+/** Whether a team tag actually names a side. */
+const known = (t) => typeof t === 'string' && t && t !== 'unknown';
+
 /**
  * A tag value as a sentence says it. Ball positions are a pair or "not
  * visible"; everything else is its own value.
@@ -73,7 +76,9 @@ function tagValue(name, value) {
 function sentence(rec) {
   switch (rec.c) {
     case 'add':
-      return `At ${at(rec.f)}, ${article(rec.a)} ${rec.a} was added${rec.t ? ` for ${rec.t}` : ''}.`;
+      // Only name the team when it is one. "added for unknown" says nothing
+      // and reads like a fault.
+      return `At ${at(rec.f)}, ${article(rec.a)} ${rec.a} was added${known(rec.t) ? ` for ${rec.t}` : ''}.`;
     case 'del':
       return `At ${at(rec.f)}, the ${rec.a} was removed.`;
     case 'relabel':
@@ -197,24 +202,32 @@ const orderTally = (o) => {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** The one-line headline for a review. Exported so a migration words it the same. */
-export function summarise({ before, after, added, removed, retimed, retagged }) {
+/**
+ * What a review amounted to, in words — used only where there are no sentences
+ * to show instead, so the counts are not left standing on their own.
+ */
+export function countPhrase({ added, removed, retimed, retagged }) {
   const bits = [];
-  const a = Object.values(added).reduce((n, v) => n + v, 0);
-  const r = Object.values(removed).reduce((n, v) => n + v, 0);
+  const a = Object.values(added ?? {}).reduce((n, v) => n + v, 0);
+  const r = Object.values(removed ?? {}).reduce((n, v) => n + v, 0);
   if (a) bits.push(`${plural(a, 'action')} added`);
   if (r) bits.push(`${plural(r, 'action')} removed`);
   if (retimed) bits.push(`${plural(retimed, 'action')} retimed`);
   if (retagged) bits.push(`${plural(retagged, 'action')} re-tagged`);
-  const head = before === after
-    ? `${before} actions, unchanged in number`
-    : `${before} actions became ${after}`;
-  return bits.length ? `${head}: ${bits.join(', ')}.` : `${head}.`;
+  if (!bits.length) return 'nothing';
+  return bits.length === 1
+    ? bits[0]
+    : `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}`;
 }
 
 /**
- * Build one review's record, or null when the reviewer changed nothing — an
- * entry saying "no difference" is noise in a file somebody has to read.
+ * What one review changed: a flat list of sentences, the counts behind them,
+ * and a note where there was nothing locatable to say. Null when the reviewer
+ * changed nothing — "no difference" is noise in a file somebody has to read.
+ *
+ * No headline and no grouping: the file folds these into one list, because
+ * splitting the history by sitting divides it along the one axis nobody here
+ * needs.
  */
 export function reviewEntry({ before, after, claim = {}, by = null, when = new Date() }) {
   const b = countByType(before);
@@ -255,13 +268,10 @@ export function reviewEntry({ before, after, claim = {}, by = null, when = new D
   const usable = records.length && reconcile(records, { added, removed, retimed, retagged }) ? records : [];
   usable.sort((x, y) => (x.c === 'time' ? x.f0 : x.f) - (y.c === 'time' ? y.f0 : y.f));
 
-  const entry = {
-    at: (when instanceof Date ? when : new Date(when)).toISOString(),
-    by: typeof by === 'string' && by ? by : null,
-    summary: summarise({ before: beforeCount, after: afterCount, added, removed, retimed, retagged }),
-  };
+  const stamp = (when instanceof Date ? when : new Date(when)).toISOString();
+  const who = typeof by === 'string' && by ? by : null;
 
-  entry.changes = usable.map((rec) => {
+  const changes = usable.map((rec) => {
     const row = {
       text: sentence(rec),
       kind: { add: 'added', del: 'removed', relabel: 'relabelled', time: 'retimed', tag: 're-tagged' }[rec.c],
@@ -272,28 +282,29 @@ export function reviewEntry({ before, after, claim = {}, by = null, when = new D
     if (rec.c === 'relabel') row.wasAction = rec.a0;
     if (rec.c === 'time') { row.fromFrame = rec.f0; row.fromTime = clock(rec.f0); }
     if (rec.c === 'tag') row.tags = Object.keys(rec.k).map((n) => TAG_WORDS[n]).join(', ');
+    row.at = stamp;
+    // Not who: one person reviews everything here, so a name on every line
+    // is a column of the same word.
     return row;
   });
 
-  if (!entry.changes.length) {
-    // Nothing locatable to say, so say why rather than leaving a bare summary.
-    entry.changes = [{
-      text: derived
-        ? 'The individual changes could not be recorded for this review: the counts above were worked out by comparing the file before and after, because the reviewer\'s own account of the edit did not add up.'
-        : 'The individual changes were not recorded for this review.',
-      kind: 'note',
-    }];
-  }
+  const counts = { before: beforeCount, after: afterCount };
+  if (addedTotal) counts.added = added;
+  if (removedTotal) counts.removed = removed;
+  if (retimed) counts.retimed = retimed;
+  if (retagged) counts.retagged = retagged;
+  if (derived) counts.derived = true;
 
-  // Kept for anything adding the log up; the sentences are what it is for.
-  entry.counts = { before: beforeCount, after: afterCount };
-  if (addedTotal) entry.counts.added = added;
-  if (removedTotal) entry.counts.removed = removed;
-  if (retimed) entry.counts.retimed = retimed;
-  if (retagged) entry.counts.retagged = retagged;
-  if (derived) entry.counts.derived = true;
+  // Nothing locatable to record, so say so once rather than leaving counts
+  // standing on their own with no explanation.
+  const note = changes.length ? null : (
+    `${countPhrase({ added, removed, retimed, retagged })} on ${stamp.slice(0, 16).replace('T', ' ')} `
+    + (derived
+      ? 'are counted in the summary above but not listed individually: the counts were worked out by comparing the file before and after, because the account of the edit did not add up.'
+      : 'are counted in the summary above but not listed individually.')
+  );
 
-  return entry;
+  return { changes, counts, note };
 }
 
 /**
