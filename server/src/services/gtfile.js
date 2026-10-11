@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
-  isValidLabel, isBody, isGoalView, isSure, isBallXY, normaliseTeam, EVENT_TAG_DEFAULTS,
+  isValidLabel, isBody, isGoalView, isSure, isBallXY, normaliseTeam,
 } from '../labels.js';
 import { writeFileAtomic } from './atomic.js';
 
@@ -164,31 +164,40 @@ const uid = () => `evt_${crypto.randomBytes(6).toString('hex')}`;
 // ---------------------------------------------------------------- tag repair
 
 /**
- * Force one stored row into a valid event, filling anything missing or
- * unrecognised with the documented default.
+ * Whether an action is marked unsure. `unsure: true` is the tag; an older file
+ * says the same thing with a `sure` below 1.0, so that is read as unsure too.
+ */
+const isUnsure = (src) => src?.unsure === true || (isSure(src?.sure) && Number(src.sure) < 1);
+
+/**
+ * The tags an older file carries, kept so a save does not drop them.
  *
- * Deliberately forgiving: these files are hand-edited, arrive from other
- * tools, and predate the tags. A row with a bad `body` should lose the bad
- * body, not the event.
+ * They are no longer asked for, so a new action never has them. One read from
+ * a file that does keeps whichever of them are valid, exactly as they were —
+ * none is filled in with a default, because a default written into a file is
+ * an answer nobody gave.
+ */
+function legacyTags(src) {
+  const out = {};
+  const team = normaliseTeam(src?.team);
+  if (team) out.team = team;
+  if (src && 'ball_xy' in src && src.ball_xy !== undefined && isBallXY(src.ball_xy)) {
+    out.ball_xy = src.ball_xy ? [Number(src.ball_xy[0]), Number(src.ball_xy[1])] : null;
+  }
+  if (isBody(src?.body)) out.body = src.body;
+  if (isGoalView(src?.goal_view)) out.goal_view = src.goal_view;
+  return out;
+}
+
+/**
+ * Force one stored row into a valid event. Deliberately forgiving: these
+ * files are hand-edited and arrive from other tools. A row with a bad tag
+ * loses the tag, not the event.
  */
 function eventFromRow(row) {
   if (!isValidLabel(row?.action) || !Number.isFinite(Number(row?.frame))) return null;
-  const ev = {
-    id: uid(),
-    type: row.action,
-    timestamp: toSeconds(row.frame),
-    team: normaliseTeam(row.team) ?? EVENT_TAG_DEFAULTS.team,
-    sure: isSure(row.sure) ? Number(row.sure) : EVENT_TAG_DEFAULTS.sure,
-    body: isBody(row.body) ? row.body : EVENT_TAG_DEFAULTS.body,
-    goal_view: isGoalView(row.goal_view) ? row.goal_view : EVENT_TAG_DEFAULTS.goal_view,
-  };
-  // ball_xy has three states, and only two of them are answers. A coordinate
-  // pair is a position; null means the ball is not visible at this frame, which
-  // the guide counts as a real answer. The key being absent means nobody has
-  // looked yet — that is not an answer, and a save is refused until it is one.
-  if (row && 'ball_xy' in row) {
-    ev.ball_xy = isBallXY(row.ball_xy) && row.ball_xy ? [Number(row.ball_xy[0]), Number(row.ball_xy[1])] : null;
-  }
+  const ev = { id: uid(), type: row.action, timestamp: toSeconds(row.frame), ...legacyTags(row) };
+  if (isUnsure(row)) ev.unsure = true;
   // Only a goal can be an own goal; the tag is meaningless elsewhere.
   if (ev.type === 'goal' && row.own_goal === true) ev.own_goal = true;
   return ev;
@@ -206,16 +215,9 @@ export function sanitiseEvent(e) {
     // the file keeps, so storing anything finer just loses it on reload and
     // makes a save look like it changed something.
     timestamp: toSeconds(toFrame(t)),
-    team: normaliseTeam(e.team) ?? EVENT_TAG_DEFAULTS.team,
-    sure: isSure(e.sure) ? Number(e.sure) : EVENT_TAG_DEFAULTS.sure,
-    body: isBody(e.body) ? e.body : EVENT_TAG_DEFAULTS.body,
-    goal_view: isGoalView(e.goal_view) ? e.goal_view : EVENT_TAG_DEFAULTS.goal_view,
+    ...legacyTags(e),
   };
-  // Absent stays absent: an unanswered ball is not silently turned into
-  // "not visible" on its way through the server.
-  if (e && 'ball_xy' in e && e.ball_xy !== undefined) {
-    ev.ball_xy = isBallXY(e.ball_xy) && e.ball_xy ? [Number(e.ball_xy[0]), Number(e.ball_xy[1])] : null;
-  }
+  if (isUnsure(e)) ev.unsure = true;
   if (ev.type === 'goal' && e.own_goal === true) ev.own_goal = true;
   return ev;
 }
@@ -264,30 +266,18 @@ export async function readSidecarKeys(videoName) {
 // ------------------------------------------------------------------- write
 
 /**
- * One row as it is stored. Key order is fixed and matches the guide's example,
+ * One row as it is stored: the frame and the action, then `unsure` only when it
+ * is set. Any tags an older file carried follow, in the order that file used,
  * so a diff between two saves shows what actually changed rather than a
- * reshuffle. `own_goal` appears only where it means something.
+ * reshuffle.
  */
-function rowFor(e) {
-  const row = {
-    frame: toFrame(e.timestamp),
-    action: e.type,
-    team: normaliseTeam(e.team) ?? EVENT_TAG_DEFAULTS.team,
-  };
-  // Only written once answered. A save with an unanswered ball is refused
-  // before it gets here, so in a file on disk this key is always present.
-  if (e.ball_xy !== undefined) {
-    row.ball_xy = e.ball_xy && isBallXY(e.ball_xy) ? [Number(e.ball_xy[0]), Number(e.ball_xy[1])] : null;
-  }
-  row.sure = isSure(e.sure) ? Number(e.sure) : EVENT_TAG_DEFAULTS.sure;
-  row.body = isBody(e.body) ? e.body : EVENT_TAG_DEFAULTS.body;
-  row.goal_view = isGoalView(e.goal_view) ? e.goal_view : EVENT_TAG_DEFAULTS.goal_view;
+export function rowFor(e) {
+  const row = { frame: toFrame(e.timestamp), action: e.type };
+  if (e.unsure === true) row.unsure = true;
+  Object.assign(row, legacyTags(e));
   if (e.type === 'goal' && e.own_goal === true) row.own_goal = true;
   return row;
 }
-
-/** Whether the ball question has been answered for this event. */
-export const ballAnswered = (e) => e?.ball_xy !== undefined;
 
 /**
  * A non-action key's value, formatted for the file.

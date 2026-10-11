@@ -92,78 +92,37 @@ export default function EventsGuide() {
           ))}
         </div>
 
-        {/* The five per-event tags, from the labelling guide. */}
+        {/* The one per-event tag. */}
         <div className="mt-10 rounded-xl border border-white/[0.06] bg-ink-800/60 p-5">
-          <h2 className="mb-1 text-sm font-semibold text-white">Five tags on every action</h2>
+          <h2 className="mb-1 text-sm font-semibold text-white">An action is a label on a frame</h2>
           <p className="mb-3 max-w-[62ch] text-2xs leading-relaxed text-ink-500">
-            You are already on the action's frame looking at the player who defines it, so these
-            cost seconds each. Tag as you mark, not in a second pass.
+            Nothing else is asked for — no team, ball position, body part or goal in view. The only
+            thing you can add is a flag for the actions you are not sure about.
           </p>
           <dl className="space-y-2.5 text-sm">
             <div>
               <dt className="font-semibold text-ink-100">
-                Team <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs ml-1">z</kbd> <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">x</kbd> <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">c</kbd>
+                Unsure <kbd className="rounded border border-white/10 bg-ink-700 ml-1 px-1.5 py-0.5 font-mono text-2xs">m</kbd>
               </dt>
               <dd className="mt-0.5 text-ink-400">
-                The team of the player whose contact defines the frame — the kicker for a pass, the
-                receiver for a reception, the tackler for a tackle, the offender for a foul, the last
-                touch before the ball went out. <b>Read the shirt.</b> Never infer it from the
-                direction of play. <em>Unknown</em> is a real answer when the shirt genuinely cannot
-                be seen, and should stay under 30% of a clip.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-ink-100">Ball <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs ml-1">b</kbd></dt>
-              <dd className="mt-0.5 text-ink-400">
-                One click on the <b>centre of the ball</b> at that frame. <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">⇧B</kbd>{' '}
-                marks it not visible — also a real answer, not a skipped field. An occluded ball whose
-                position is obvious (under a foot, in the keeper's hands) still gets the click.
-                <b className="text-amber-400"> This one is required:</b> the clip will not save while any
-                action is still without a ball answer. Save tells you how many are left and jumps to the
-                first, and the badge by the action count keeps a running total.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-ink-100">
-                Sure <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs ml-1">6</kbd> <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">7</kbd> <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">8</kbd>
-              </dt>
-              <dd className="mt-0.5 text-ink-400">
-                <b>1.0</b> class and frame both clear · <b>0.7</b> it happened, but the class is a
-                judgement call or the frame is off by more than 3 frames · <b>0.3</b> you would not
-                bet on it. Doubt about whether it happened <em>at all</em> means: don't label it.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-ink-100">Body <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs ml-1">v</kbd></dt>
-              <dd className="mt-0.5 text-ink-400">
-                The body part making the contact: foot, head, hand, other.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-ink-100">Goal in view <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs ml-1">n</kbd></dt>
-              <dd className="mt-0.5 text-ink-400">
-                Which goal mouth the camera shows at that frame — left, right or none. Not where play
-                is heading.
+                Every action is <b>sure</b> unless you tick it. Tick <b>Unsure</b> in the inspector, or
+                press <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">m</kbd>, when the label is a judgement call or the frame could be off by more
+                than a few frames. Doubt about whether it happened <em>at all</em> means: don't label it.
               </dd>
             </div>
           </dl>
         </div>
 
-        {/* The guide's own consistency checks. */}
+        {/* The guide's own consistency checks that hold on labels alone. */}
         <div className="mt-4 rounded-xl border border-white/[0.06] bg-ink-800/60 p-5">
           <h2 className="mb-2 text-sm font-semibold text-white">Checks you can do yourself</h2>
           <ul className="space-y-1.5 text-sm text-ink-400">
-            <li>• A <b>pass</b> and the <b>pass received</b> after it are the same team.</li>
-            <li>• A <b>pass</b> and the <b>interception</b> that cuts it out are different teams.</li>
-            <li>• A <b>take on</b> and the <b>tackle</b> of the same duel are different teams.</li>
-            <li>• An <b>aerial duel</b> is two events on one frame — one Team A, one Team B.</li>
-            <li>• <b>Ball out of play</b> is tagged with the team that does <em>not</em> take the restart.</li>
-            <li>• Across a clip, neither team should carry more than 70% of any one action — that
-              usually means the tag was filled from habit rather than read off the shirt.</li>
+            <li>• An <b>aerial duel</b> is two events on one frame — one for each player.</li>
+            <li>• A <b>goal</b> always comes with a <b>shot</b> on the same frame.</li>
           </ul>
           <p className="mt-2.5 text-2xs text-ink-600">
             The workspace runs these for you: the badge beside the action count in the header shows
-            the unknown share and anything inconsistent, and clicking a warning jumps to it.
+            how many actions are unsure and anything inconsistent, and clicking a line jumps to it.
           </p>
         </div>
 

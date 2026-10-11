@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, getToken, setToken, setUnauthorizedHandler } from '../lib/api';
-import { EVENT_LABELS, LABEL_META, EVENT_TAG_DEFAULTS, missingBall } from '../lib/labels';
+import { EVENT_LABELS, LABEL_META } from '../lib/labels';
 import { reviewDiff, tallyTotal } from '../lib/review';
 import { saveVideo, loadVideo } from '../lib/db';
 
@@ -198,32 +198,11 @@ export const useStore = create((set, get) => ({
   /**
    * Write the clip. `finish` also signs the review off, which is the same
    * request on purpose: a sign-off must not be able to land without the
-   * actions it signs off on, and the ball check below can still refuse both.
+   * actions it signs off on.
    */
   saveProject: async ({ silent = false, finish = false } = {}) => {
     const { project, events, reviewing, reviewBaseline } = get();
     if (!project) return;
-
-    /**
-     * The ball question has to be answered on every action before a clip can
-     * be written: a position, or "not visible". It is the one tag with no safe
-     * default — null would quietly assert the ball was not there — so instead
-     * of guessing, the save stops and points at the first action still open.
-     */
-    const open = missingBall(events);
-    if (open.length) {
-      const first = open[0];
-      set({ selectedId: first.id, selectedIds: [] });
-      get().seek(first.timestamp);
-      get().toast(
-        `Not saved — ${open.length} action${open.length === 1 ? ' still needs' : 's still need'} a ball ` +
-          `position. Click the ball (b), or mark it not visible (⇧B). Jumped to the first.`,
-        'error',
-      );
-      const err = new Error('ball position missing');
-      err.missingBall = open.length;
-      throw err;
-    }
 
     /**
      * Worked out before the write, not after: the diff matches events by id,
@@ -571,15 +550,12 @@ export const useStore = create((set, get) => ({
     }),
 
   addEvent: (type, timestamp, extra = {}) => {
-    // Every event carries the five tags from the labelling guide. team starts
-    // at 'unknown' on purpose rather than inheriting the last one: a tag
-    // carried over from habit is exactly what the guide's consistency checks
-    // exist to catch, and an honest 'unknown' is a valid answer.
+    // A label on a frame and nothing else. Sure unless somebody ticks it
+    // unsure, so no tag is filled in here.
     const ev = {
       id: uid(),
       type,
       timestamp: Number(Number(timestamp).toFixed(3)),
-      ...EVENT_TAG_DEFAULTS,
       ...extra,
     };
     get().commit([...get().events, ev], { label: `add ${type}` });
@@ -590,7 +566,8 @@ export const useStore = create((set, get) => ({
   /**
    * Set one tag on an event. Falls back to the event nearest the playhead when
    * nothing is selected, so a tag key right after marking an action lands on
-   * the action just marked without reaching for the mouse.
+   * the action just marked without reaching for the mouse. `patch` may be a
+   * function of the event, for a key that toggles.
    */
   setTag: (patch, id = null) => {
     const { events, selectedId, currentTime } = get();
@@ -607,17 +584,12 @@ export const useStore = create((set, get) => ({
       if (best && bestGap <= 2) target = best.id;
     }
     if (!target) return null;
-    get().updateEvent(target, patch);
+    const ev = events.find((e) => e.id === target);
+    if (!ev) return null;
+    get().updateEvent(target, typeof patch === 'function' ? patch(ev) : patch);
     set({ selectedId: target });
     return target;
   },
-
-  /**
-   * While armed, the next click on the picture records the ball's centre for
-   * the selected event instead of toggling playback.
-   */
-  ballPick: false,
-  setBallPick: (v) => set({ ballPick: Boolean(v) }),
 
   updateEvent: (id, patch) =>
     get().commit(

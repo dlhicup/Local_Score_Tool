@@ -74,7 +74,7 @@ export default function ReviewChanges() {
     try {
       await finishReview();
     } catch {
-      /* the store has already said why — a missing ball answer, usually */
+      /* the store has already said why */
     } finally {
       setFinishing(false);
     }

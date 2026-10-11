@@ -99,90 +99,29 @@ export const LABEL_DEFINITIONS = {
 };
 
 // ---------------------------------------------------------------------------
-// Per-event tags, from Upgraded_guide.md. Mirrors server/src/labels.js — the
-// server is the authority and repairs anything that disagrees, but the UI
-// needs the same vocabulary to offer the choices.
+// Per-event tags. Mirrors server/src/labels.js.
+//
+// An action is a label on a frame. The one tag still collected is `unsure`,
+// stored only when it is set — absent means sure. Tags an older file carries
+// (team, ball_xy, body, goal_view) are passed through untouched and never
+// asked for.
 // ---------------------------------------------------------------------------
 
-/**
- * The team of the player whose contact defines the event's frame.
- *
- * Named neutrally rather than home/away: this corpus has no reliable home
- * side, and a neutral name stops the tag being guessed from which end a team
- * attacks. These strings are what gets stored.
- */
-export const TEAM_A = 'Team A';
-export const TEAM_B = 'Team B';
-export const TEAMS = [TEAM_A, TEAM_B, 'unknown'];
-
-export const TEAM_META = {
-  [TEAM_A]: { label: 'Team A', short: 'A', color: '#38BDF8', key: 'z', kitKey: 'team_a' },
-  [TEAM_B]: { label: 'Team B', short: 'B', color: '#FB923C', key: 'x', kitKey: 'team_b' },
-  unknown: { label: 'Unknown', short: '?', color: '#64748B', key: 'c', kitKey: null },
-};
-
-/** Three anchored levels — a free value is not comparable between people. */
-export const SURE_LEVELS = [
-  { value: 1.0, label: '1.0', key: '6', hint: 'class and frame both clear' },
-  { value: 0.7, label: '0.7', key: '7', hint: 'it happened, but the class is a judgement call or the frame is off by >3 frames' },
-  { value: 0.3, label: '0.3', key: '8', hint: 'I think it happened, but I would not bet on it' },
-];
-
-export const BODY_PARTS = ['foot', 'head', 'hand', 'other'];
-export const GOAL_VIEWS = ['left', 'right', 'none'];
+/** The key that toggles the unsure flag on the selected (or nearest) action. */
+export const UNSURE_KEY = 'm';
 
 /**
- * Defaults for a freshly marked event; the server applies the same ones.
+ * The guide's checks that hold on labels alone, run over one clip's events.
  *
- * `ball_xy` is deliberately absent: null would claim the ball was not visible,
- * and a position cannot be guessed. It stays unanswered until somebody says
- * otherwise, and Save is refused while any action is still in that state.
+ * Advisory: they catch an action that is usually marked with a partner and
+ * here stands alone. Each returns a short line naming the event involved so the
+ * annotator can jump to it.
  */
-export const EVENT_TAG_DEFAULTS = {
-  team: 'unknown',
-  sure: 1.0,
-  body: 'foot',
-  goal_view: 'none',
-};
-
-/** Has the ball question been answered — a position, or "not visible"? */
-export const ballAnswered = (e) => e?.ball_xy !== undefined;
-
-/** Actions still waiting on a ball answer, earliest first. */
-export const missingBall = (events) =>
-  [...events].sort((a, b) => a.timestamp - b.timestamp).filter((e) => !ballAnswered(e));
-
-/**
- * The consistency checks from the guide (A.4), run over one clip's events.
- *
- * These are advisory: they catch the tag filled from habit rather than from
- * the shirt, which is the failure the guide warns about. Each returns a short
- * line naming the events involved so the annotator can jump to them.
- */
-export function teamChecks(events) {
+export function labelChecks(events) {
   const out = [];
   const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
-  const known = (e) => e.team === TEAM_A || e.team === TEAM_B;
 
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = sorted[i - 1];
-    const cur = sorted[i];
-    if (!known(prev) || !known(cur)) continue;
-    // A reception is by definition the same team as the pass it receives.
-    if (prev.type === 'pass' && cur.type === 'pass_received' && prev.team !== cur.team) {
-      out.push({ at: cur.timestamp, id: cur.id, text: 'pass → pass_received should be the same team' });
-    }
-    // An interception is by definition the other team than the pass.
-    if (prev.type === 'pass' && cur.type === 'interception' && prev.team === cur.team) {
-      out.push({ at: cur.timestamp, id: cur.id, text: 'pass → interception should be different teams' });
-    }
-    // A take-on and the tackle that stops it are two sides of one duel.
-    if (prev.type === 'take_on' && cur.type === 'tackle' && prev.team === cur.team) {
-      out.push({ at: cur.timestamp, id: cur.id, text: 'take_on and its tackle should be different teams' });
-    }
-  }
-
-  // An aerial duel is two labels on one frame, one per team.
+  // An aerial duel is two labels on one frame, one per player.
   const byFrame = new Map();
   for (const e of sorted.filter((x) => x.type === 'aerial_duel')) {
     const k = Math.round(e.timestamp * 25);
@@ -191,9 +130,7 @@ export function teamChecks(events) {
   }
   for (const [, pair] of byFrame) {
     if (pair.length === 1) {
-      out.push({ at: pair[0].timestamp, id: pair[0].id, text: 'aerial_duel is usually two events on one frame, one per team' });
-    } else if (pair.length === 2 && known(pair[0]) && known(pair[1]) && pair[0].team === pair[1].team) {
-      out.push({ at: pair[0].timestamp, id: pair[0].id, text: 'the two sides of an aerial_duel should be different teams' });
+      out.push({ at: pair[0].timestamp, id: pair[0].id, text: 'aerial_duel is usually two events on one frame, one per player' });
     }
   }
 
@@ -210,10 +147,4 @@ export function teamChecks(events) {
   }
 
   return out;
-}
-
-/** Share of events tagged `unknown`; the guide asks that it stay under 30%. */
-export function unknownShare(events) {
-  if (!events.length) return 0;
-  return events.filter((e) => e.team === 'unknown').length / events.length;
 }

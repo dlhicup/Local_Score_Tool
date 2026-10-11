@@ -179,10 +179,10 @@ export async function listProjects() {
     if (!events.length && !Object.keys(extra).length) continue;
 
     const byType = {};
-    let unknownTeam = 0;
+    let unsure = 0;
     for (const e of events) {
       byType[e.type] = (byType[e.type] ?? 0) + 1;
-      if (e.team === 'unknown') unknownTeam += 1;
+      if (e.unsure) unsure += 1;
     }
     const [times, media, status] = await Promise.all([
       fileTimes(name), videoPath(name).then(probeVideo), reviewStatus(name),
@@ -200,7 +200,7 @@ export async function listProjects() {
       // Positions for the timeline strip, capped so a pathological file
       // cannot bloat a listing of a thousand clips.
       marks: events.slice(0, 80).map((e) => ({ t: Number(e.timestamp.toFixed(2)), y: e.type })),
-      unknownTeam,
+      unsure,
       duration: media.duration,
       meta: { ...times, review: extra.review ?? null, annotator: extra.annotator ?? null },
       review: extra.review ?? null,

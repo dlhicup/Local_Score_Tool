@@ -14,7 +14,7 @@ import ActionMenu from '../components/ActionMenu';
 import ConfirmDelete from '../components/ConfirmDelete';
 import { useStore } from '../store/useStore';
 import { useHotkeys } from '../lib/useHotkeys';
-import { labelTitle, TEAMS, TEAM_META, SURE_LEVELS, BODY_PARTS, GOAL_VIEWS } from '../lib/labels';
+import { labelTitle, UNSURE_KEY } from '../lib/labels';
 import { frameStep, DEFAULT_FPS, REPORTING_FPS } from '../lib/fps';
 import { getVideoEl } from '../lib/videoRef';
 
@@ -43,7 +43,7 @@ const TIMELINE_MAX_SHARE = '40%';
  * The annotating workspace, in one of two modes.
  *
  * `review` opens somebody else's finished clip to be corrected, and keeps a
- * record of the correction: what was added, removed, retimed or re-tagged,
+ * record of the correction: what was added, removed, retimed or marked unsure,
  * written into the clip's own file on save. `annotate` is the same workspace
  * with no record kept.
  */
@@ -55,7 +55,7 @@ export default function Review({ mode = 'annotate' }) {
   const {
     project, openProject, events, videoUrl, attachVideo, currentTime, seek,
     selectedId, selectedIds, select, clearSelection, addEvent, deleteEvent, deleteSelection, nudge, undo, redo,
-    saveProject, dirty, setPlaying, playing, setPlaybackRate, toast, setTag, ballPick, setBallPick,
+    saveProject, dirty, setPlaying, playing, setPlaybackRate, toast, setTag,
     past, future, loadingProject, settings, keyMap, setHeaderDelete,
     deleteCurrentProject, setReviewing,
   } = useStore();
@@ -205,10 +205,6 @@ export default function Review({ mode = 'annotate' }) {
           }
           return;
         case 'Escape':
-          if (ballPick) {
-            e.preventDefault();
-            return setBallPick(false);
-          }
           if (selectedIds.length) {
             e.preventDefault();
             return clearSelection();
@@ -238,43 +234,16 @@ export default function Review({ mode = 'annotate' }) {
         return;
       }
 
-      // ---- tag keys, from the labelling guide ----------------------------
-      // Checked after the label keys so that rebinding a label onto one of
-      // these still works; the defaults do not collide.
-      const k = e.key.toLowerCase();
-
-      const team = TEAMS.find((t) => TEAM_META[t].key === k);
-      if (team) {
+      // The one tag key. Checked after the label keys so that rebinding a
+      // label onto it still works; the defaults do not collide.
+      if (e.key.toLowerCase() === UNSURE_KEY) {
         e.preventDefault();
-        return setTag({ team });
-      }
-
-      const sure = SURE_LEVELS.find((l) => l.key === e.key);
-      if (sure) {
-        e.preventDefault();
-        return setTag({ sure: sure.value });
-      }
-
-      if (k === 'b') {
-        e.preventDefault();
-        // Shift+B is the other valid answer: the ball is not visible here.
-        if (e.shiftKey) { setBallPick(false); return setTag({ ball_xy: null }); }
-        if (!selectedId) return toast('Select an action first, then click the ball', 'info');
-        return setBallPick(!ballPick);
-      }
-
-      // Cycle the two smallest tags rather than spend four more keys on them.
-      if (k === 'v' || k === 'n') {
-        e.preventDefault();
-        const ev = events.find((x) => x.id === selectedId);
-        if (!ev) return;
-        const list = k === 'v' ? BODY_PARTS : GOAL_VIEWS;
-        const field = k === 'v' ? 'body' : 'goal_view';
-        const next = list[(list.indexOf(ev[field]) + 1) % list.length];
-        return setTag({ [field]: next }, ev.id);
+        const id = setTag((ev) => ({ unsure: ev.unsure ? undefined : true }));
+        if (!id) toast('Select an action first, or stop the playhead near one', 'info');
+        return;
       }
     },
-    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, stepFrame, dirty, saveProject, setTag, ballPick, setBallPick],
+    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, stepFrame, dirty, saveProject, setTag],
   );
 
   // Saving already writes groundtruth/<clip>.json, so the only header action
@@ -354,9 +323,9 @@ export default function Review({ mode = 'annotate' }) {
         x={menu?.x ?? 0}
         y={menu?.y ?? 0}
         atTime={menu?.atTime ?? 0}
-        onPick={(label, at, team) => {
-          addEvent(label, at, team ? { team } : {});
-          toast(`${labelTitle(label)}${team ? ` · ${team}` : ''} at ${at.toFixed(2)}s`, 'success');
+        onPick={(label, at) => {
+          addEvent(label, at);
+          toast(`${labelTitle(label)} at ${at.toFixed(2)}s`, 'success');
         }}
         onClose={() => setMenu(null)}
       />

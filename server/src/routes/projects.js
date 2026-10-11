@@ -3,7 +3,7 @@ import {
   listProjects, readProject, writeProject, deleteProject, projectForClip, clipForId,
 } from '../services/store.js';
 import { summarise } from '../services/merge.js';
-import { sanitiseEvent, ballAnswered, groundTruthExists, toFrame, REPORTING_FPS } from '../services/gtfile.js';
+import { sanitiseEvent, rowFor, groundTruthExists, toFrame, REPORTING_FPS } from '../services/gtfile.js';
 import { getAssignments } from '../services/users.js';
 import { reviewEntry, sameActions } from '../services/reviewlog.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -85,21 +85,6 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
       ? incoming.events.map(sanitiseEvent).filter(Boolean).sort((a, b) => a.timestamp - b.timestamp)
       : existing.events;
 
-    // The ball is the one tag with no safe default, so a file is never written
-    // with the question left open: either a position, or "not visible". The
-    // client checks first and says which action is missing; this is the backstop
-    // for anything reaching the API directly.
-    const unanswered = events.filter((e) => !ballAnswered(e));
-    if (unanswered.length) {
-      return res.status(422).json({
-        error:
-          `${unanswered.length} action${unanswered.length === 1 ? ' still needs' : 's still need'} ` +
-          'a ball position, or marking as not visible',
-        missingBall: unanswered.length,
-        firstAt: unanswered[0].timestamp,
-      });
-    }
-
     const project = {
       ...existing,
       name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name.trim() : existing.name,
@@ -169,10 +154,9 @@ router.delete('/projects/:id', requireAuth, async (req, res, next) => {
 });
 
 /**
- * Download endpoint. Emits the clip's ground truth exactly as it is stored —
- * which is now the same shape the file on disk holds, tags and all. `?plain=1`
- * drops back to the bare `{frame, action}` rows for a consumer that predates
- * the tags.
+ * Download endpoint. Emits the clip's ground truth in the shape the file on
+ * disk holds: `{frame, action}`, `unsure` where set, and any tags an older file
+ * still carries. `?plain=1` gives the bare `{frame, action}` rows only.
  */
 router.get('/projects/:id/export', requireAuth, async (req, res, next) => {
   try {
@@ -184,17 +168,8 @@ router.get('/projects/:id/export', requireAuth, async (req, res, next) => {
       .map((e, i) => ({ e, i }))
       .sort((a, b) => toFrame(a.e.timestamp) - toFrame(b.e.timestamp) || a.i - b.i)
       .map(({ e }) => {
-        const row = { frame: toFrame(e.timestamp), action: e.type };
-        if (plain) return row;
-        Object.assign(row, {
-          team: e.team,
-          ball_xy: e.ball_xy ?? null,
-          sure: e.sure,
-          body: e.body,
-          goal_view: e.goal_view,
-        });
-        if (e.type === 'goal' && e.own_goal) row.own_goal = true;
-        return row;
+        if (plain) return { frame: toFrame(e.timestamp), action: e.type };
+        return rowFor(e);
       });
 
     const safeName = String(project.name).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._ -]+/g, '_').slice(0, 80);

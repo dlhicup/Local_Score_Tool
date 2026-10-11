@@ -1,7 +1,5 @@
 import { Router } from 'express';
-import {
-  EVENT_LABELS, LABEL_DEFINITIONS, TEAMS, SURE_LEVELS, BODY_PARTS, GOAL_VIEWS,
-} from '../labels.js';
+import { EVENT_LABELS, LABEL_DEFINITIONS } from '../labels.js';
 import { allKits, kitForClip } from '../services/kits.js';
 import { actionDefinitions } from '../services/actions.js';
 
@@ -17,8 +15,8 @@ router.get('/labels', async (_req, res, next) => {
       definitions,
       notes,
       definitionsFrom: source,
-      // The tag vocabularies, so a client never has to hardcode them.
-      tags: { teams: TEAMS, sure: SURE_LEVELS, body: BODY_PARTS, goalView: GOAL_VIEWS },
+      // The one tag still collected: `unsure: true`, written only when set.
+      tags: { unsure: [true] },
     });
   } catch (err) {
     next(err);

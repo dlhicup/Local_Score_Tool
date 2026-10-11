@@ -25,12 +25,6 @@ export default function VideoStage({ nearbyEvents = [] }) {
   const [ready, setReady] = useState(false);
   const videoProgress = useStore((s) => s.videoProgress);
   const rate = useStore((s) => s.playbackRate);
-  const ballPick = useStore((s) => s.ballPick);
-  const setBallPick = useStore((s) => s.setBallPick);
-  const selectedId = useStore((s) => s.selectedId);
-  const events = useStore((s) => s.events);
-  const updateEvent = useStore((s) => s.updateEvent);
-  const selected = events.find((e) => e.id === selectedId) ?? null;
   const setRate = useStore((s) => s.setPlaybackRate);
   // Stepping moves one frame on the reporting clock — the same unit the
   // exported frame numbers use.
@@ -73,54 +67,6 @@ export default function VideoStage({ nearbyEvents = [] }) {
   }, [clampPan]);
 
   const resetZoom = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
-
-  /**
-   * Where the picture actually sits, in the wrapper's own coordinates.
-   *
-   * Two things stand between a click and a pixel of video. The element is
-   * object-contain, so the picture is letterboxed inside its box at a fitted
-   * scale; and it carries scale(zoom) translate(pan) about its centre. The
-   * wrapper is untransformed, so it is the stable frame to measure against —
-   * the video's own getBoundingClientRect() already has the transform baked
-   * in and cannot be used for this.
-   */
-  const geometry = useCallback(() => {
-    const wrap = wrapRef.current;
-    const v = ref.current;
-    if (!wrap || !v || !v.videoWidth || !v.videoHeight) return null;
-    const r = wrap.getBoundingClientRect();
-    const fit = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
-    return {
-      left: r.left, top: r.top,
-      boxW: r.width, boxH: r.height,
-      vw: v.videoWidth, vh: v.videoHeight,
-      fit, picW: v.videoWidth * fit, picH: v.videoHeight * fit,
-    };
-  }, []);
-
-  /** A click in screen coordinates -> the video's own pixels, or null when the
-   *  click landed on the letterbox rather than on the picture. */
-  const toNative = useCallback((clientX, clientY) => {
-    const g = geometry();
-    if (!g) return null;
-    // undo the transform: screen = centre + zoom * (u + pan)
-    const ux = (clientX - (g.left + g.boxW / 2)) / zoom - pan.x;
-    const uy = (clientY - (g.top + g.boxH / 2)) / zoom - pan.y;
-    // undo object-contain: u is measured from the centre of the picture
-    const x = (ux + g.picW / 2) / g.fit;
-    const y = (uy + g.picH / 2) / g.fit;
-    if (x < 0 || y < 0 || x > g.vw || y > g.vh) return null;
-    return [Math.round(x), Math.round(y)];
-  }, [geometry, zoom, pan]);
-
-  /** The same mapping the other way, for drawing the marker back on. */
-  const toLocal = useCallback(([x, y]) => {
-    const g = geometry();
-    if (!g) return null;
-    const ux = x * g.fit - g.picW / 2;
-    const uy = y * g.fit - g.picH / 2;
-    return { x: g.boxW / 2 + zoom * (ux + pan.x), y: g.boxH / 2 + zoom * (uy + pan.y) };
-  }, [geometry, zoom, pan]);
 
   // A new clip starts at 1x rather than inheriting the last one's framing.
   useEffect(() => { resetZoom(); setReady(false); }, [videoUrl, resetZoom]);
@@ -250,7 +196,7 @@ export default function VideoStage({ nearbyEvents = [] }) {
         style={{
           transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
           transformOrigin: 'center center',
-          cursor: ballPick ? 'crosshair' : zoom > 1 ? (panning.current ? 'grabbing' : 'grab') : 'default',
+          cursor: zoom > 1 ? (panning.current ? 'grabbing' : 'grab') : 'default',
         }}
         onPointerDown={(e) => {
           if (zoom === 1 || e.button !== 0) return;
@@ -278,13 +224,6 @@ export default function VideoStage({ nearbyEvents = [] }) {
         }}
         onClick={(e) => {
           if (justPanned.current) { justPanned.current = false; return; }
-          if (ballPick && selected) {
-            const xy = toNative(e.clientX, e.clientY);
-            // A click on the letterbox is not a position in the video; ignore
-            // it and stay armed rather than recording a bogus pixel.
-            if (xy) { updateEvent(selected.id, { ball_xy: xy }); setBallPick(false); }
-            return;
-          }
           setPlaying(!playing);
         }}
         onEnded={() => setPlaying(false)}
@@ -320,30 +259,6 @@ export default function VideoStage({ nearbyEvents = [] }) {
         </div>
       )}
 
-      {/* Where the ball was clicked for the selected event. */}
-      {selected?.ball_xy && (() => {
-        const p = toLocal(selected.ball_xy);
-        if (!p) return null;
-        return (
-          <div
-            className="pointer-events-none absolute z-20"
-            style={{ left: p.x, top: p.y, transform: 'translate(-50%, -50%)' }}
-          >
-            <div className="h-4 w-4 rounded-full border-2 border-pitch-400" style={{ boxShadow: '0 0 10px rgba(34,227,125,.9)' }} />
-            <div className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pitch-400" />
-          </div>
-        );
-      })()}
-
-      {/* Arming banner, so it is obvious the next click will not play/pause. */}
-      {ballPick && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center pt-3">
-          <span className="rounded-full border border-pitch-500/40 bg-ink-900/90 px-3 py-1 text-2xs font-medium text-pitch-400 backdrop-blur">
-            {selected ? 'Click the centre of the ball · Esc to cancel' : 'Select an action first'}
-          </span>
-        </div>
-      )}
-
       {/* Events firing at this instant, shown over the picture */}
       <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1.5">
         <AnimatePresence>
@@ -365,7 +280,7 @@ export default function VideoStage({ nearbyEvents = [] }) {
                 style={{ background: LABEL_META[e.type].color, boxShadow: `0 0 10px ${LABEL_META[e.type].color}` }}
               />
               <span className="text-xs font-semibold text-white">{labelTitle(e.type)}</span>
-              {e.team && <span className="text-2xs uppercase text-white/60">{e.team}</span>}
+              {e.unsure && <span className="text-2xs uppercase text-amber-300">unsure</span>}
             </motion.div>
           ))}
         </AnimatePresence>

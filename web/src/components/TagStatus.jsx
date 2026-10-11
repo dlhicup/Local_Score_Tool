@@ -2,19 +2,17 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Check, ChevronDown } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { teamChecks, unknownShare, missingBall } from '../lib/labels';
+import { labelChecks } from '../lib/labels';
 import { seconds2 } from '../lib/format';
 
 /**
- * How well tagged this clip is, from the labelling guide's own checks.
+ * How this clip reads against the guide.
  *
- * Two things it watches. The share of events tagged `unknown`, which the guide
- * asks to keep under 30% — a match above that is returned. And the consistency
- * rules in A.4, which catch the team filled in from habit rather than read off
- * the shirt: a reception that changed team, an interception that did not, a
- * duel whose two halves agree.
+ * Two things: how many actions are marked unsure, and the checks that hold on
+ * labels alone — a goal with no shot on its frame, an aerial duel with only one
+ * side marked.
  *
- * Advisory, never blocking. Clicking a warning jumps to the event it names.
+ * Advisory, never blocking. Clicking a line jumps to the event it names.
  */
 export default function TagStatus() {
   const events = useStore((s) => s.events);
@@ -22,22 +20,21 @@ export default function TagStatus() {
   const select = useStore((s) => s.select);
   const [open, setOpen] = useState(false);
 
-  const { share, checks, noBall } = useMemo(
-    () => ({ share: unknownShare(events), checks: teamChecks(events), noBall: missingBall(events) }),
+  const { unsure, checks } = useMemo(
+    () => ({ unsure: events.filter((e) => e.unsure), checks: labelChecks(events) }),
     [events],
   );
 
   if (!events.length) return null;
 
-  const overUnknown = share > 0.3;
-  // The ball is the one tag that blocks a save, so it leads the badge.
-  const clean = !overUnknown && checks.length === 0 && noBall.length === 0;
+  const clean = checks.length === 0;
+  const jump = (e) => { seek(e.timestamp ?? e.at); select(e.id); setOpen(false); };
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        title="Tagging checks from the labelling guide"
+        title="Unsure actions, and checks from the labelling guide"
         className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium transition ${
           clean
             ? 'border-white/10 text-ink-400 hover:text-ink-100'
@@ -45,8 +42,7 @@ export default function TagStatus() {
         }`}
       >
         {clean ? <Check size={13} /> : <AlertTriangle size={13} />}
-        {noBall.length > 0 && <span className="tabular">{noBall.length} no ball ·</span>}
-        <span className="tabular">{Math.round(share * 100)}% unknown</span>
+        <span className="tabular">{unsure.length} unsure</span>
         {checks.length > 0 && <span className="tabular">· {checks.length}</span>}
         <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -59,40 +55,30 @@ export default function TagStatus() {
             exit={{ opacity: 0, y: -4 }}
             className="absolute right-0 top-full z-50 mt-2 w-[22rem] overflow-hidden rounded-xl border border-white/10 bg-ink-800 shadow-lift"
           >
-            {noBall.length > 0 && (
-              <button
-                onClick={() => { seek(noBall[0].timestamp); select(noBall[0].id); setOpen(false); }}
-                className="flex w-full items-start gap-2 border-b border-white/[0.06] px-3 py-2 text-left transition hover:bg-white/[0.04]"
-              >
-                <span className="mt-0.5 font-mono text-2xs tabular text-amber-400">{noBall.length}</span>
-                <span className="flex-1 text-2xs leading-snug text-amber-400">
-                  action{noBall.length === 1 ? '' : 's'} with no ball answer — the clip cannot be saved until each has
-                  a position or is marked not visible. Click to jump to the first.
-                </span>
-              </button>
-            )}
-
             <div className="border-b border-white/[0.06] px-3 py-2">
-              <p className={`text-xs font-medium ${overUnknown ? 'text-amber-400' : 'text-ink-300'}`}>
-                {Math.round(share * 100)}% of actions have an unknown team
+              <p className="text-xs font-medium text-ink-300">
+                {unsure.length} action{unsure.length === 1 ? '' : 's'} marked unsure
               </p>
-              <p className="mt-0.5 text-2xs leading-snug text-ink-500">
-                {overUnknown
-                  ? 'The guide asks for under 30%. Tag from the shirt — never from the direction of play.'
-                  : 'Under the 30% the guide asks for.'}
-              </p>
+              {unsure.length > 0 && (
+                <button
+                  onClick={() => jump(unsure[0])}
+                  className="mt-0.5 text-2xs text-ink-500 transition hover:text-ink-100"
+                >
+                  Jump to the first, at {seconds2(unsure[0].timestamp)}
+                </button>
+              )}
             </div>
 
             {checks.length === 0 ? (
               <p className="px-3 py-3 text-2xs text-ink-500">
-                No consistency problems found in the team tags.
+                No consistency problems found in the labels.
               </p>
             ) : (
               <div className="max-h-64 overflow-y-auto">
                 {checks.map((c, i) => (
                   <button
                     key={`${c.id}-${i}`}
-                    onClick={() => { seek(c.at); select(c.id); setOpen(false); }}
+                    onClick={() => jump(c)}
                     className="flex w-full items-start gap-2 border-b border-white/[0.04] px-3 py-2 text-left transition last:border-0 hover:bg-white/[0.04]"
                   >
                     <span className="mt-0.5 font-mono text-2xs tabular text-ink-600">{seconds2(c.at)}</span>

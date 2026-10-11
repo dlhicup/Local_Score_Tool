@@ -154,18 +154,18 @@ Open a clip from the Library, then mark each action at the frame it happens.
 Press the action's key at the playhead, or right-click the timeline to pick
 from a list.
 
-Then **tag it**, while you are still on its frame — five fields, a few seconds
-each, all of them on every action. See [The ground-truth files](#the-ground-truth-files)
-for what each one means, and the **Events guide** page in the app for how to
-judge them.
+That is all an action is: a label on a frame. Nothing else is asked for. If
+you are not sure of one, tick **Unsure** in the inspector or press `m`. An
+action is sure unless you do. See [The ground-truth files](#the-ground-truth-files)
+for how this is stored, and the **Events guide** page in the app for the labels.
 
 **Save** writes the ground truth and stays on the clip. Pick the next clip
 from the Library when you're done.
 
-The badge beside the action count in the header watches two things for you: the
-share of actions still tagged `unknown` (the spec asks for under 30%), and the
-consistency rules — a reception that changed team, an interception that didn't,
-an aerial duel whose two halves agree. Click a warning to jump to it.
+The badge beside the action count in the header shows how many actions are
+marked unsure, and flags the label checks from the guide: a goal with no shot on
+its frame, an aerial duel with only one player marked. Click a line to jump to
+it. None of it blocks a save.
 
 ### Reviewing someone else's clip
 
@@ -325,14 +325,10 @@ in a browser tab instead of saving it.
 
 | key | sets |
 | --- | --- |
-| `z` `x` `c` | team: Team A · Team B · unknown |
-| `b` | click the centre of the ball · `⇧B` marks it not visible |
-| `6` `7` `8` | sure: 1.0 · 0.7 · 0.3 |
-| `v` | body: foot → head → hand → other |
-| `n` | goal in view: left → right → none |
+| `m` | marks the action unsure · press again to clear |
 
-A tag key applies to the selected action, or to the nearest one within two
-seconds of the playhead — so tagging straight after marking needs no mouse.
+It applies to the selected action, or to the nearest one within two seconds of
+the playhead — so marking one unsure straight after adding it needs no mouse.
 
 ### The 15 event keys
 
@@ -427,62 +423,35 @@ Frame numbers are on a **fixed 25 fps reporting clock** — `frame = seconds × 
 if it was shot at 30 fps. That clock is the file's only precision, so a time
 read back is on the 1/25 s grid.
 
-Every action carries the five tags:
+Each action is a frame and a label. The one optional tag is `"unsure": true`,
+written only on the actions somebody marked unsure — absent means sure:
 
 ```json
 {"groundtruth":[
-  {"frame":283,"action":"pass","team":"Team A","ball_xy":[1210,402],"sure":1,"body":"foot","goal_view":"left"},
-  {"frame":312,"action":"aerial_duel","team":"Team A","ball_xy":null,"sure":0.7,"body":"head","goal_view":"none"},
-  {"frame":312,"action":"aerial_duel","team":"Team B","ball_xy":null,"sure":0.7,"body":"head","goal_view":"none"}
+  {"frame":283,"action":"pass"},
+  {"frame":312,"action":"aerial_duel","unsure":true},
+  {"frame":312,"action":"aerial_duel","unsure":true}
 ]}
 ```
 
 | field | values | what it is |
 | --- | --- | --- |
-| `team` | `Team A` `Team B` `unknown` | the team of the player whose contact defines the frame — read off the shirt, never inferred from the direction of play |
-| `ball_xy` | `[x, y]` or `null` | the centre of the ball at that frame in the video's own pixels; `null` means not visible, which is an answer, not a gap. **Required — see below** |
-| `sure` | `1.0` `0.7` `0.3` | doubt about the **class or the timing**. Doubt about whether it happened at all means don't label it |
-| `body` | `foot` `head` `hand` `other` | the body part making the contact |
-| `goal_view` | `left` `right` `none` | which goal mouth is in the picture at that frame |
-
-A `goal` that was an own goal also carries `"own_goal": true`; the team stays
-the credited (attacking) side.
-
-> **Note on `team`.** These two values were originally specified as `home` and
-> `away`. They are **`Team A`** and **`Team B`** here, because the corpus has no
-> reliable home side and a venue-based name invites the tag being guessed from
-> which end a team attacks. `Upgraded_guide.md` is amended to match, and
-> anything consuming these files needs to expect the new strings. Reading is
-> tolerant in both directions — `home`, `away`, `team_a` and `team_b` are all
-> accepted on the way in and rewritten to the canonical pair on the next save —
-> so files written to the original spec load unchanged.
+| `frame` | integer | where the action happens, on the 25 fps clock |
+| `action` | one of the 15 labels | what happened |
+| `unsure` | `true`, or absent | the label or the timing is a judgement call. Doubt about whether it happened at all means don't label it |
 
 Rows are in frame order, with events on the same frame keeping the order they
 were added — which is how an `aerial_duel` pair stays together.
 
-**The ball is required — a clip will not save without it.** Every other tag has
-a starting value; `ball_xy` has none, because there is no answer that is safe
-to assume. `null` would silently claim the ball was not visible, and a position
-cannot be guessed. So it has three states, and only two are answers:
-
-| in the workspace | means |
-| --- | --- |
-| `[x, y]` | the ball's centre at that frame — click it, or press `b` |
-| `null` | not visible or out of frame — press `⇧B`. A real answer |
-| not set | nobody has looked yet. **Not** an answer |
-
-Pressing Save while any action is in the third state **writes nothing**, tells
-you how many are outstanding and jumps to the first. The header badge shows the
-running count, so you can see it coming. A file on disk therefore always has
-`ball_xy` on every row.
-
-**Reading older files.** A file with only `frame` and `action` loads fine; the
-other tags take their defaults (`team: "unknown"`, `sure: 1.0`, `body: "foot"`,
-`goal_view: "none"`) and are written out in full on the next save. `ball_xy`
-does not default — an older file's actions all count as unanswered, so expect
-to work through them before that clip can be saved again. A bad value in any
-tag is repaired rather than dropping the action. Both `{"groundtruth": [...]}`
-and a bare array are accepted.
+**Reading older files.** Files written while the tool still asked for five tags
+per action (`team`, `ball_xy`, `sure`, `body`, `goal_view`, and `own_goal` on a
+goal) load as before. Those tags are no longer shown or asked for, but they are
+**kept**: whatever valid tags a row already has are written back unchanged on
+the next save, so no earlier work is lost. The exception is `sure`, which
+`unsure` replaces — a row with `sure` below `1.0` is read as `"unsure": true`,
+and `sure` itself is not written again. A bad value in any tag is dropped
+rather than dropping the action. Both `{"groundtruth": [...]}` and a bare array
+are accepted.
 
 **The clip file holds the actions and nothing else.** Alongside `groundtruth`
 it may carry one more key, optional:
@@ -591,9 +560,13 @@ read from the video, so nothing has to be cached anywhere.
 
 ## Kit colours (`kits.json`)
 
-The team tag is only resolvable if a reader can tell the two sides apart, so
-put a `kits.json` at the project root and the colours appear beside the
-Team A / Team B buttons while annotating. Copy `kits.example.json` to start.
+> The workspace no longer asks for a team, so it no longer shows the kit
+> colours either. The file is still served at `/api/kits` for anything that
+> reads the team tag in older ground truth.
+
+A `kits.json` at the project root records which colours each side wears, so a
+reader of a single frame can tell the two sides apart. Copy
+`kits.example.json` to start.
 
 Sides are keyed `team_a` / `team_b`, the same names the tag uses. Which side is
 which doesn't matter to the model — only that the same shirt is always the same

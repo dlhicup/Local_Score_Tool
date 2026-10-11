@@ -1,9 +1,6 @@
 import { PanelRightClose, PanelRightOpen, Keyboard } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import {
-  EVENT_LABELS, LABEL_META, LABEL_GROUPS, labelTitle,
-  TEAMS, TEAM_META, SURE_LEVELS,
-} from '../lib/labels';
+import { EVENT_LABELS, LABEL_META, LABEL_GROUPS, labelTitle, UNSURE_KEY } from '../lib/labels';
 
 /**
  * The key for every action, always on screen.
@@ -64,60 +61,13 @@ export default function KeyGuide({ open, onToggle }) {
         })}
       </div>
 
-      {/* The five tags share this column: they are pressed just as often. */}
+      {/* The one tag shares this column: it is pressed right after a label. */}
       <div className="border-t border-white/[0.06] px-2 py-1.5">
-        <p className="px-1 pb-0.5 pt-1 text-2xs font-semibold uppercase tracking-wider text-ink-600">Tag the action</p>
-
         <div className="flex items-center gap-2 rounded px-1 py-[3px]">
-          <span className="flex shrink-0 gap-0.5">
-            {TEAMS.map((t) => (
-              <kbd
-                key={t}
-                title={TEAM_META[t].label}
-                className="w-5 rounded border text-center font-mono text-2xs uppercase"
-                style={{
-                  color: TEAM_META[t].color,
-                  borderColor: `${TEAM_META[t].color}55`,
-                  background: `${TEAM_META[t].color}1a`,
-                }}
-              >
-                {TEAM_META[t].key}
-              </kbd>
-            ))}
-          </span>
-          <span className="flex-1 truncate text-2xs text-ink-300">Team A · B · unknown</span>
-        </div>
-
-        <div className="flex items-center gap-2 rounded px-1 py-[3px]">
-          <kbd className="w-5 shrink-0 rounded border border-amber-500/40 bg-amber-500/15 text-center font-mono text-2xs uppercase text-amber-400">b</kbd>
-          <span className="flex-1 truncate text-2xs text-ink-300">
-            Click the ball · <span className="text-ink-500">⇧B not visible</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 rounded px-1 py-[3px]">
-          <span className="flex shrink-0 gap-0.5">
-            {SURE_LEVELS.map((l) => (
-              <kbd
-                key={l.key}
-                title={l.hint}
-                className="w-5 rounded border border-white/10 bg-ink-700 text-center font-mono text-2xs text-ink-200"
-              >
-                {l.key}
-              </kbd>
-            ))}
-          </span>
-          <span className="flex-1 truncate text-2xs text-ink-300">Sure 1.0 · 0.7 · 0.3</span>
-        </div>
-
-        <div className="flex items-center gap-2 rounded px-1 py-[3px]">
-          <kbd className="w-5 shrink-0 rounded border border-white/10 bg-ink-700 text-center font-mono text-2xs text-ink-200">v</kbd>
-          <span className="flex-1 truncate text-2xs text-ink-300">Body: foot → head → hand → other</span>
-        </div>
-
-        <div className="flex items-center gap-2 rounded px-1 py-[3px]">
-          <kbd className="w-5 shrink-0 rounded border border-white/10 bg-ink-700 text-center font-mono text-2xs text-ink-200">n</kbd>
-          <span className="flex-1 truncate text-2xs text-ink-300">Goal in view: left → right → none</span>
+          <kbd className="w-5 shrink-0 rounded border border-amber-500/40 bg-amber-500/15 text-center font-mono text-2xs uppercase text-amber-400">
+            {UNSURE_KEY}
+          </kbd>
+          <span className="flex-1 truncate text-2xs text-ink-300">Mark unsure · press again to clear</span>
         </div>
       </div>
 

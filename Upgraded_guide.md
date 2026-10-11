@@ -1,5 +1,12 @@
 # Team tagging at the moment of an event, and the extra tags per event
 
+> **Superseded 2026-10-11 in the Local Score Tool.** The tool no longer asks
+> for `team`, `ball_xy`, `sure`, `body` or `goal_view`. An action is a `frame`
+> and an `action`, plus `"unsure": true` on the ones the annotator ticks
+> unsure, which replaces the three `sure` levels. Absent means sure. Files that
+> already carry the older tags keep them on save. A `sure` below 1.0 is read
+> as `unsure`. The rest of this document describes those older tags.
+
 > **Amended 2026-09-19, as implemented in the Local Score Tool.** The two
 > sides are named **Team A** and **Team B** throughout, not home and away. This
 > corpus has no reliable home side, and a venue-based name invites the tag

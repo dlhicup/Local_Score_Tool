@@ -21,14 +21,13 @@ import { REPORTING_FPS } from './fps';
 const frameOf = (e) =>
   Math.max(0, Math.round(Number(((Number(e?.timestamp) || 0) * REPORTING_FPS).toFixed(6))));
 
-/** The tags an action carries, under the short names the log uses. */
+/**
+ * The tags a reviewer can change, under the short names the log uses. Only
+ * `unsure` is still edited; tags an older file carries pass through untouched,
+ * so they can never differ between the two sides of a review.
+ */
 const TAGS = [
-  ['team', (e) => e?.team],
-  ['sure', (e) => e?.sure],
-  ['body', (e) => e?.body],
-  ['goal', (e) => e?.goal_view],
-  ['ball', (e) => (e?.ball_xy === undefined ? 'open' : e.ball_xy === null ? null : e.ball_xy)],
-  ['og', (e) => e?.own_goal === true],
+  ['unsure', (e) => e?.unsure === true],
 ];
 
 const same = (a, b) =>
@@ -64,7 +63,7 @@ export function reviewDiff(baseline = [], events = []) {
     const before = was.get(e.id);
     if (!before) {
       bump(added, e.type);
-      changes.push({ c: 'add', a: e.type, f: frameOf(e), t: e.team });
+      changes.push({ c: 'add', a: e.type, f: frameOf(e) });
       continue;
     }
     /**

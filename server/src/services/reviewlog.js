@@ -25,8 +25,13 @@ import { toFrame, REPORTING_FPS } from './gtfile.js';
 
 const CHANGE_KINDS = new Set(['add', 'del', 'relabel', 'time', 'tag']);
 
-/** The tags an action carries, and how to say each one in a sentence. */
+/**
+ * The tags an action can carry, and how to say each one in a sentence. Only
+ * `unsure` is still edited; the rest are kept so a log written while they were
+ * still asked for reads the same as it did.
+ */
 const TAG_WORDS = {
+  unsure: 'unsure flag',
   team: 'team',
   sure: 'confidence',
   body: 'body part',
@@ -68,7 +73,7 @@ function tagValue(name, value) {
     if (value === 'open' || value === undefined) return 'unanswered';
     return String(value);
   }
-  if (name === 'og') return value === true || value === 'true' ? 'yes' : 'no';
+  if (name === 'og' || name === 'unsure') return value === true || value === 'true' ? 'yes' : 'no';
   return String(value);
 }
 
@@ -313,7 +318,7 @@ export function reviewEntry({ before, after, claim = {}, by = null, when = new D
  */
 const signature = (e) =>
   [
-    toFrame(e?.timestamp), e?.type, e?.team, e?.sure, e?.body, e?.goal_view,
+    toFrame(e?.timestamp), e?.type, e?.unsure === true ? 'unsure' : '', e?.team, e?.body, e?.goal_view,
     e?.ball_xy === undefined ? 'open' : e.ball_xy === null ? 'hidden' : `${e.ball_xy[0]},${e.ball_xy[1]}`,
     e?.own_goal === true ? 'og' : '',
   ].join(':');
