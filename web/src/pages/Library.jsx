@@ -73,7 +73,7 @@ function reviewBucket(v) {
  * One grid for the head and every row, written out in full so Tailwind sees
  * the class — a class built from pieces at runtime is never generated.
  */
-const GRID = 'grid-cols-[20px_minmax(0,1fr)_80px_88px_64px_56px_64px_248px_20px]';
+const GRID = 'grid-cols-[20px_minmax(0,1fr)_80px_88px_64px_56px_64px_288px_20px]';
 
 /**
  * One group of the filter column: a title, then each choice as a full-width
@@ -291,13 +291,33 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
           Annotate
         </button>
 
-        {/* This clip's review log, without opening it. A link rather than a
-            button so the browser downloads it; stopPropagation because the row
-            itself opens the clip. Only offered where there is a log. */}
-        {/* This clip's review log, without opening it. Plain text, because the
-            log is written to be read; the header has the spreadsheet forms.
-            A link rather than a button so the browser downloads it, and
-            stopPropagation because the row itself opens the clip. */}
+        {/* Downloads, without opening the clip. Links rather than buttons so
+            the browser saves the file, and stopPropagation because the row
+            itself opens the clip. Each slot keeps its width when there is
+            nothing to offer, so the buttons line up from row to row. */}
+
+        {/* The clip's label file, exactly as it sits in groundtruth/. */}
+        {p ? (
+          <a
+            href={api.labelFileUrl(p.id)}
+            download
+            onClick={(e) => e.stopPropagation()}
+            title={`Download the label file for ${v.name}: ${p.eventCount} action${p.eventCount === 1 ? '' : 's'}, as saved`}
+            className="flex w-[50px] items-center justify-center gap-1 rounded-md border border-white/[0.07] py-1 text-2xs font-semibold text-ink-400 transition hover:border-pitch-500/40 hover:bg-pitch-500/10 hover:text-pitch-400"
+          >
+            <Download size={11} /> Labels
+          </a>
+        ) : (
+          <span
+            title="No labels yet: nothing to download"
+            className="w-[50px] py-1 text-center text-2xs text-ink-700"
+          >
+            no labels
+          </span>
+        )}
+
+        {/* The review log, in plain text because it is written to be read; the
+            header has the spreadsheet forms. */}
         {reviewCount > 0 ? (
           <a
             href={api.reviewLogUrl({ clip: v.name, format: 'txt' })}
@@ -748,7 +768,7 @@ export default function Library() {
                   clip name — the only column whose content cannot be guessed — to
                   nothing, and rather than clipping the buttons off the right. */}
               <div className="overflow-x-auto">
-                <div className="min-w-[968px]">
+                <div className="min-w-[996px]">
                 <div className={`grid ${GRID} gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600`}>
                   <span />
                   <span>Clip</span>

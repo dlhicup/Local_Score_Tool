@@ -112,7 +112,8 @@ export const api = {
       },
     }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
-  exportUrl: (id, onlyAccepted) => `${BASE}/projects/${id}/export${onlyAccepted ? '?accepted=1' : ''}`,
+  /** A link the browser downloads a clip's label file from: its file in groundtruth/, as saved. */
+  labelFileUrl: (id) => `${BASE}/projects/${encodeURIComponent(id)}/export`,
 
   listVideos: () => request('/videos'),
   deleteVideo: (name) => request(`/videos/${encodeURIComponent(name)}`, { method: 'DELETE' }),

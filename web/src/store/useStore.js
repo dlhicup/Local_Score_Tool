@@ -461,9 +461,13 @@ export const useStore = create((set, get) => ({
 
   /** Open a clip from the task list: find or create its ground truth, attach it. */
   openTask: async (name) => {
-    const { project } = await api.openVideo(name);
+    const { project, saved } = await api.openVideo(name);
     set({
       project,
+      // Opening from the Library skips the workspace's own load, so this is
+      // the one place that says whether the clip has a file. Left alone, it
+      // kept whatever the previous clip had.
+      saved: Boolean(saved),
       events: sortEvents(project.events ?? []),
       dirty: false,
       past: [],

@@ -1,9 +1,10 @@
+import path from 'node:path';
 import { Router } from 'express';
 import {
   listProjects, readProject, writeProject, deleteProject, projectForClip, clipForId,
 } from '../services/store.js';
 import { summarise } from '../services/merge.js';
-import { sanitiseEvent, rowFor, groundTruthExists, toFrame, REPORTING_FPS } from '../services/gtfile.js';
+import { sanitiseEvent, rowFor, groundTruthExists, findGroundTruth, toFrame, REPORTING_FPS } from '../services/gtfile.js';
 import { getAssignments } from '../services/users.js';
 import { reviewEntry, sameActions } from '../services/reviewlog.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -185,15 +186,30 @@ router.delete('/projects/:id', requireAuth, async (req, res, next) => {
 });
 
 /**
- * Download endpoint. Emits the clip's ground truth in the shape the file on
- * disk holds: `{frame, action}`, `unsure` where set, and any tags an older file
- * still carries. `?plain=1` gives the bare `{frame, action}` rows only.
+ * Download a clip's label file.
+ *
+ * Where the clip has one, it is the file itself, exactly as it sits in
+ * groundtruth/: its own name, its own bytes, any keys it was handed in with.
+ * What is downloaded is then exactly what gets handed off. A clip with no file
+ * yet gets its actions in the shape a file holds: `{frame, action}`, `unsure`
+ * where set. `?plain=1` gives the bare `{frame, action}` rows only.
  */
 router.get('/projects/:id/export', requireAuth, async (req, res, next) => {
   try {
     const project = await resolveProject(req.params.id);
     if (!(await mayTouch(req.user, project))) return res.status(403).json({ error: 'This clip is not assigned to you' });
     const plain = req.query.plain === '1';
+
+    if (!plain) {
+      const found = await findGroundTruth(project.video?.filename);
+      if (found) {
+        // Saved a minute ago and downloaded again: never a cached copy.
+        res.setHeader('Cache-Control', 'no-store');
+        return res.download(found.path, path.basename(found.path), { dotfiles: 'allow' }, (err) => {
+          if (err && !res.headersSent) next(err);
+        });
+      }
+    }
 
     const rows = (project.events ?? [])
       .map((e, i) => ({ e, i }))

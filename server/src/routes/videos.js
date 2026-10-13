@@ -8,7 +8,7 @@ import {
   videoPath, videoIndex, invalidateVideoIndex, unmatchedGroundTruth,
 } from '../services/store.js';
 import { getAssignments, assignClips } from '../services/users.js';
-import { removeGroundTruth } from '../services/gtfile.js';
+import { removeGroundTruth, groundTruthExists } from '../services/gtfile.js';
 import { clipCategory } from '../services/category.js';
 import { ensureProxy, proxyState, removeProxy } from '../services/proxy.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -353,7 +353,10 @@ router.post('/videos/:name/open', requireAuth, async (req, res, next) => {
     // simply reading it. A clip with no file yet reads as empty; the file is
     // written when something is saved, not merely because it was opened.
     const project = await projectForClip(name);
-    res.json({ project, created: project.events.length === 0 });
+    // `saved`: whether the clip has a file, the same answer GET /projects/:id
+    // gives. The workspace reads it to offer the file's download and delete.
+    const saved = await groundTruthExists(name);
+    res.json({ project, saved, created: project.events.length === 0 });
   } catch (err) {
     if (err.code === 'ENOENT') return res.status(404).json({ error: 'Video not found' });
     next(err);

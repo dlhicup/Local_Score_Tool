@@ -1,12 +1,13 @@
 import { NavLink, useParams, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, GraduationCap } from 'lucide-react';
+import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, GraduationCap, Download } from 'lucide-react';
 import Logo from './Logo';
 import TagStatus from './TagStatus';
 import ClipNav from './ClipNav';
 import { useStore } from '../store/useStore';
 import { isManager } from '../lib/roles';
 import { libraryPath } from '../lib/libraryFilters';
+import { api } from '../lib/api';
 
 function RailLink({ to, icon: Icon, label, disabled }) {
   if (disabled) {
@@ -135,6 +136,27 @@ export default function AppShell({ children }) {
                   <Redo2 size={15} />
                 </button>
               </div>
+
+              {/* The clip's label file as last saved, the same file the Library
+                  row downloads. Unsaved edits are not in it, and it says so. */}
+              <a
+                href={saved ? api.labelFileUrl(project.id) : undefined}
+                download
+                aria-disabled={!saved}
+                onClick={(e) => { if (!saved) e.preventDefault(); }}
+                title={
+                  !saved
+                    ? 'Nothing saved yet — there is no label file to download'
+                    : dirty
+                      ? 'Download the label file as last saved — your unsaved changes are not in it'
+                      : 'Download this clip’s label file'
+                }
+                className={`rounded-lg p-2 transition ${
+                  saved ? 'text-ink-400 hover:bg-white/10 hover:text-white' : 'cursor-not-allowed text-ink-700'
+                }`}
+              >
+                <Download size={15} />
+              </a>
 
               {headerDelete && (
                 <button

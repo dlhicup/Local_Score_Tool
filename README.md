@@ -280,6 +280,14 @@ Either way only the mark goes. The actions are not rewritten, and if you are
 holding unsaved edits when you unmark, they stay unsaved — unmarking is not a
 back door to saving them.
 
+### Downloading a clip's labels
+
+Each annotated row in the Library has a **⬇ Labels** beside its buttons, which
+downloads that clip's label file without opening it: the file exactly as it
+sits in `groundtruth/`, with its own name. A clip with no actions says
+*no labels* instead. The header of an open clip has the same download, the ⬇
+next to the bin, which gives the file as last saved.
+
 ### Downloading the review log
 
 Each row in the Library has a **⬇ Log** beside its buttons, which downloads
