@@ -14,10 +14,6 @@ import { saveQueue } from '../lib/queue';
 import { FILTER_PARAMS, recallLibraryFilters, rememberLibraryFilters } from '../lib/libraryFilters';
 
 
-const STATUS = {
-  todo: { label: 'Not started', icon: Circle, tone: 'text-ink-500' },
-  done: { label: 'Has ground truth', icon: CheckCircle2, tone: 'text-pitch-400' },
-};
 
 /**
  * A clip's type is the folder it sits in under video/ — "Full match",
@@ -29,25 +25,16 @@ const UNSORTED = '__none__';
 const typeOf = (v) => v.category || UNSORTED;
 const typeLabel = (key) => (key === UNSORTED ? 'Unsorted' : key);
 
-/** A tint per folder, from its name, so a folder keeps its colour as others come and go. */
-const TINTS = [
-  'border-sky-500/30 bg-sky-500/10 text-sky-300',
-  'border-violet-500/30 bg-violet-500/10 text-violet-300',
-  'border-teal-500/30 bg-teal-500/10 text-teal-300',
-  'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300',
-  'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
-  'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
-];
+/**
+ * A colour per folder, from its name, so a folder keeps its colour as others
+ * come and go: the dot beside it in the Type filter and under each clip.
+ */
 const DOTS = ['bg-sky-400', 'bg-violet-400', 'bg-teal-400', 'bg-fuchsia-400', 'bg-indigo-400', 'bg-cyan-400'];
 function tintIndex(key) {
   let h = 0;
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return h % TINTS.length;
+  return h % DOTS.length;
 }
-function typeTint(key) {
-  return key === UNSORTED ? 'border-white/10 bg-white/[0.03] text-ink-500' : TINTS[tintIndex(key)];
-}
-/** The same colour as the folder's pill in the rows, as a dot for the filter. */
 function typeDot(key) {
   return key === UNSORTED ? 'bg-ink-500' : DOTS[tintIndex(key)];
 }
@@ -73,7 +60,7 @@ function reviewBucket(v) {
  * One grid for the head and every row, written out in full so Tailwind sees
  * the class — a class built from pieces at runtime is never generated.
  */
-const GRID = 'grid-cols-[20px_minmax(0,1fr)_80px_88px_64px_56px_64px_288px_20px]';
+const GRID = 'grid-cols-[minmax(0,1fr)_168px_148px_284px]';
 
 /**
  * One group of the filter column: a title, then each choice as a full-width
@@ -124,66 +111,89 @@ function MiniBoxes({ level }) {
  * alone. One not yet passed is an outline that only explains itself; it is
  * not a button, because there is nothing to click it for.
  */
+/**
+ * The two review boxes. A passed box is filled, and clicking it takes that
+ * review off again, after asking. The review due next is outlined in amber, so
+ * what is waiting stands out; one that cannot happen yet stays faint. Beside
+ * them, the same words the Review filter uses.
+ */
 function ReviewBoxes({ v, p, onClear }) {
   const level = p?.reviewLevel ?? 0;
   const stamps = [p?.firstReview ?? null, p?.secondReview ?? null];
+  const words = !p ? null : level === 0 ? 'Needs 1st' : level === 1 ? 'Needs 2nd' : 'Both passed';
   return (
-    <span className="flex items-center gap-[3px]">
-      {[1, 2].map((n) => {
-        const name = n === 1 ? '1st review' : '2nd review';
-        const box = 'grid h-[18px] w-[18px] place-items-center rounded font-mono text-[10px] font-bold';
-        if (n <= level) {
-          const at = stamps[n - 1]?.at;
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="flex shrink-0 items-center gap-[3px]">
+        {[1, 2].map((n) => {
+          const name = n === 1 ? '1st review' : '2nd review';
+          const box = 'grid h-[18px] w-[18px] place-items-center rounded font-mono text-[10px] font-bold';
+          if (n <= level) {
+            const at = stamps[n - 1]?.at;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onClear(v, n); }}
+                title={`${name} passed${at ? ` ${relativeTime(at)}` : ''} — click to take it off${n === 1 && level === 2 ? ' (the 2nd goes with it)' : ''}`}
+                className={`${box} bg-pitch-500 text-ink-950 transition hover:bg-avoid-500 hover:text-white`}
+              >
+                {n}
+              </button>
+            );
+          }
+          const due = Boolean(p) && n === level + 1;
           return (
-            <button
+            <span
               key={n}
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onClear(v, n); }}
-              title={`${name} passed${at ? ` ${relativeTime(at)}` : ''} — click to take it off${n === 1 && level === 2 ? ' (the 2nd goes with it)' : ''}`}
-              className={`${box} bg-pitch-500 text-ink-950 transition hover:bg-avoid-500 hover:text-white`}
+              title={!p ? 'Nothing to review: this clip has no labels' : due ? `${name}: due next` : '2nd review comes after the 1st'}
+              className={`${box} border ${due ? 'border-amber-400/60 text-amber-400' : 'border-white/[0.08] text-ink-600'}`}
             >
               {n}
-            </button>
+            </span>
           );
-        }
-        const title = !p
-          ? 'Nothing to review: this clip has no labels'
-          : n === 2 && level === 0
-            ? '2nd review comes after the 1st'
-            : `${name} not passed yet`;
-        const reachable = Boolean(p) && (n === 1 || level >= 1);
-        return (
-          <span key={n} title={title} className={`${box} border ${reachable ? 'border-white/20 text-ink-500' : 'border-white/[0.06] text-ink-700'}`}>
-            {n}
-          </span>
-        );
-      })}
+        })}
+      </span>
+      {words && <span className={`truncate text-2xs ${level === 2 ? 'text-pitch-400' : 'text-ink-300'}`}>{words}</span>}
     </span>
   );
 }
 
+/** A clip's playback state while it is not plain browser video yet. */
+const PROXY_NOTE = {
+  encoding: { text: 'preparing playback…', tone: 'text-pitch-400' },
+  needed: { text: 'needs converting', tone: 'text-amber-400', title: "This clip's codec can't be shown by a browser — it will be converted when opened" },
+  failed: { text: 'conversion failed', tone: 'text-avoid-500' },
+  unavailable: { text: 'codec may need ffmpeg', tone: 'text-ink-400', title: 'Install ffmpeg on the host to convert HEVC/Veo clips' },
+};
 
+/**
+ * One clip, in four columns: what it is, what is on it, where its review
+ * stands, and the ways to open it or take its files. Everything else about it,
+ * its type, size, when it was edited and who has it, is one quiet line under
+ * the name, so the columns hold only what changes from row to row.
+ */
 function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
   const type = typeOf(v);
-  const s = STATUS[v.status];
-  const Icon = s.icon;
   // A project with no events is not "0% reviewed" — there is nothing to review
   // yet. Treat it as untouched everywhere it shows up.
   const p = v.project?.eventCount ? v.project : null;
   // Which of the two reviews the clip has passed: 0, 1 or 2.
   const level = p?.reviewLevel ?? 0;
-  // How many reviews this clip has been through. Drives whether there is a
-  // log to download for it at all.
+  // How many reviews this clip has been through: whether there is a log.
   const reviewCount = p?.reviewCount ?? 0;
   // Clicking the row opens a clip that already has actions for review, so
   // whatever gets corrected is recorded; one with none opens to annotate.
-  // The two buttons on the right still choose either way.
+  // The two buttons still choose either way.
   const rowMode = p ? 'review' : 'annotate';
+  const note = PROXY_NOTE[v.proxy];
 
   const mix = p?.byType
     ? EVENT_LABELS.map((l) => ({ l, n: p.byType[l] ?? 0 })).filter((x) => x.n > 0)
     : [];
   const total = mix.reduce((sum, x) => sum + x.n, 0) || 1;
+
+  const half = 'px-2.5 py-1 text-2xs font-semibold transition';
+  const fileLink = 'flex items-center gap-1 rounded px-1.5 py-1 text-2xs font-medium text-ink-400 transition hover:bg-white/[0.06] hover:text-white';
 
   return (
     <motion.div
@@ -197,158 +207,142 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(v, rowMode); }
       }}
-      className={`group grid w-full cursor-pointer ${GRID} items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]`}
+      className={`group grid w-full cursor-pointer ${GRID} items-center gap-4 px-4 py-2 text-left transition hover:bg-white/[0.03] focus-visible:bg-white/[0.05] focus-visible:shadow-[inset_2px_0_0_0_rgba(34,227,125,.7)] focus-visible:outline-none`}
     >
-      <Icon size={15} className={`shrink-0 ${s.tone}`} title={s.label} />
-
+      {/* The clip, and one line about it */}
       <span className="min-w-0">
-        <span className="block truncate font-mono text-xs text-ink-100">{v.name}</span>
-        {v.proxy === 'encoding' ? (
-          <span className="block truncate text-2xs text-pitch-400">preparing playback…</span>
-        ) : v.proxy === 'needed' ? (
-          <span className="block truncate text-2xs text-amber-400" title="This clip's codec can't be shown by a browser — it will be converted when opened">needs converting</span>
-        ) : v.proxy === 'failed' ? (
-          <span className="block truncate text-2xs text-avoid-500">conversion failed</span>
-        ) : v.proxy === 'unavailable' ? (
-          <span className="block truncate text-2xs text-ink-600" title="Install ffmpeg on the host to convert HEVC/Veo clips">codec may need ffmpeg</span>
-        ) : p && (
-          <span className="block truncate text-2xs text-ink-500">
-            {p.updatedAt ? `edited ${relativeTime(p.updatedAt)}` : ''}
+        <span title={v.name} className="block truncate font-mono text-[13px] text-ink-100">{v.name}</span>
+        <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-ink-400">
+          {note && (
+            <>
+              <span title={note.title} className={`shrink-0 ${note.tone}`}>{note.text}</span>
+              <span className="text-ink-600">·</span>
+            </>
+          )}
+          <span
+            title={type === UNSORTED ? 'Not in a folder: loose at the top of video/' : `video/${type}/`}
+            className="flex shrink-0 items-center gap-1.5"
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${typeDot(type)}`} />
+            {typeLabel(type)}
           </span>
-        )}
-      </span>
-
-      <span className="min-w-0">
-        <span
-          title={type === UNSORTED ? 'Not in a folder: loose at the top of video/' : `video/${type}/`}
-          className={`block truncate rounded border px-1.5 py-0.5 text-center text-[10px] font-semibold ${typeTint(type)}`}
-        >
-          {typeLabel(type)}
+          <span className="text-ink-600">·</span>
+          <span className="shrink-0">{bytes(v.size)}</span>
+          {p?.updatedAt && (
+            <>
+              <span className="text-ink-600">·</span>
+              <span className="truncate">edited {relativeTime(p.updatedAt)}</span>
+            </>
+          )}
+          {v.assignedTo && (
+            <>
+              <span className="text-ink-600">·</span>
+              <span className="truncate text-ink-300" title={`Assigned to ${v.assignedTo}`}>{v.assignedTo}</span>
+            </>
+          )}
         </span>
       </span>
 
-      <span className="min-w-0">
-        {v.assignedTo ? (
-          <span className="truncate text-2xs text-ink-300" title={`Assigned to ${v.assignedTo}`}>
-            {v.assignedTo}
+      {/* How many actions, and their mix, so a finished clip shows its shape at a glance */}
+      <span className="flex items-center gap-2.5">
+        <span className={`w-9 shrink-0 text-right font-mono text-xs font-semibold tabular ${p ? 'text-ink-100' : 'text-ink-600'}`}>
+          {p ? p.eventCount : '—'}
+        </span>
+        {/* No bar at all without labels: an empty one reads as "0%". */}
+        {p && (
+          <span className="flex h-1.5 flex-1 gap-px overflow-hidden rounded-full bg-white/[0.06]">
+            {mix.map(({ l, n }) => (
+              <span
+                key={l}
+                title={`${labelTitle(l)}: ${n}`}
+                style={{ width: `${(n / total) * 100}%`, background: LABEL_META[l].color }}
+              />
+            ))}
           </span>
-        ) : (
-          <span className="text-2xs text-ink-600">unassigned</span>
         )}
       </span>
 
-      <span className="text-right font-mono text-2xs text-ink-500 tabular">{bytes(v.size)}</span>
+      {/* Where its review stands */}
+      <ReviewBoxes v={v} p={p} onClear={onClearReviewed} />
 
-      <span className="text-right font-mono text-xs tabular">
-        {p ? <span className="text-pitch-400">{p.eventCount}</span> : <span className="text-ink-600">—</span>}
-      </span>
+      {/* Open it either way, take its files, or remove it */}
+      <span className="flex items-center gap-1">
+        {/* Two ways in, as one control. Review is for correcting a clip that is
+            already labeled, and records what it changed, so it is disabled
+            until there are labels. The half a row click would take is the
+            brighter one. */}
+        <span className="inline-flex shrink-0 overflow-hidden rounded-md border border-white/10 bg-white/[0.02]">
+          <button
+            type="button"
+            disabled={!p}
+            onClick={(e) => { e.stopPropagation(); onOpen(v, 'review'); }}
+            title={
+              !p
+                ? 'Nothing to review yet: this clip has no labels'
+                : level === 0
+                  ? `Open for its 1st review — ${p.eventCount} action${p.eventCount === 1 ? '' : 's'}, your changes recorded`
+                  : level === 1
+                    ? 'Open for its 2nd review — your changes recorded'
+                    : 'Both reviews passed — open to review it again'
+            }
+            className={`${half} hover:bg-amber-500/15 hover:text-amber-300 disabled:cursor-not-allowed disabled:text-ink-600 disabled:hover:bg-transparent ${
+              rowMode === 'review' ? 'text-white' : 'text-ink-300'
+            }`}
+          >
+            Review
+          </button>
+          <span className="w-px bg-white/10" />
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onOpen(v, 'annotate'); }}
+            title={p ? 'Open for annotating' : 'Start labelling this clip'}
+            className={`${half} hover:bg-pitch-500/15 hover:text-pitch-400 ${rowMode === 'annotate' ? 'text-white' : 'text-ink-300'}`}
+          >
+            Annotate
+          </button>
+        </span>
 
-      {/* Label mix, so a finished clip shows its shape at a glance */}
-      <span className="flex h-1.5 gap-px overflow-hidden rounded-full bg-ink-800">
-        {mix.map(({ l, n }) => (
-          <span
-            key={l}
-            title={`${labelTitle(l)}: ${n}`}
-            style={{ width: `${(n / total) * 100}%`, background: LABEL_META[l].color }}
-          />
-        ))}
-      </span>
+        {/* Its files, without opening it: the label file exactly as it sits in
+            groundtruth/, and the review log in plain text, written to be read.
+            Links rather than buttons so the browser saves them, and
+            stopPropagation because the row itself opens the clip. Each keeps
+            its place when there is nothing to offer, so they line up. */}
+        <span className="ml-1.5 flex w-[60px] shrink-0">
+          {p && (
+            <a
+              href={api.labelFileUrl(p.id)}
+              download
+              onClick={(e) => e.stopPropagation()}
+              title={`Download the label file for ${v.name}: ${p.eventCount} action${p.eventCount === 1 ? '' : 's'}, as saved`}
+              className={fileLink}
+            >
+              <Download size={11} /> Labels
+            </a>
+          )}
+        </span>
+        <span className="flex w-[46px] shrink-0">
+          {reviewCount > 0 && (
+            <a
+              href={api.reviewLogUrl({ clip: v.name, format: 'txt' })}
+              download
+              onClick={(e) => e.stopPropagation()}
+              title={`Download the review log for ${v.name}: ${reviewCount} review${reviewCount === 1 ? '' : 's'}, written out in full`}
+              className={fileLink}
+            >
+              <Download size={11} /> Log
+            </a>
+          )}
+        </span>
 
-      {/* Two ways in. Review is for correcting a clip somebody has already
-          labeled, and records what it changed, so there is nothing for it to do
-          until there are labels — it stays disabled and says why. */}
-      <span className="flex items-center justify-end gap-1.5">
         <button
           type="button"
-          disabled={!p}
-          onClick={(e) => { e.stopPropagation(); onOpen(v, 'review'); }}
-          title={
-            !p
-              ? 'Nothing to review yet: this clip has no labels'
-              : level === 0
-                ? `Open for its 1st review — ${p.eventCount} action${p.eventCount === 1 ? '' : 's'}, your changes recorded`
-                : level === 1
-                  ? 'Open for its 2nd review — your changes recorded'
-                  : 'Both reviews passed — open to review it again'
-          }
-          className={`rounded-md border px-2 py-1 text-2xs font-semibold transition ${
-            !p
-              ? 'cursor-not-allowed border-white/[0.06] text-ink-700'
-              : level === 2
-                ? 'border-white/10 text-ink-300 hover:border-white/25 hover:text-white'
-                : 'border-amber-500/40 bg-amber-500/[0.10] text-amber-400 hover:bg-amber-500/20'
-          }`}
-        >
-          Review
-        </button>
-        <ReviewBoxes v={v} p={p} onClear={onClearReviewed} />
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onOpen(v, 'annotate'); }}
-          title={p ? 'Open for annotating' : 'Start labelling this clip'}
-          className="rounded-md border border-pitch-500/40 bg-pitch-500/[0.10] px-2 py-1 text-2xs font-semibold text-pitch-400 transition hover:bg-pitch-500/20"
-        >
-          Annotate
-        </button>
-
-        {/* Downloads, without opening the clip. Links rather than buttons so
-            the browser saves the file, and stopPropagation because the row
-            itself opens the clip. Each slot keeps its width when there is
-            nothing to offer, so the buttons line up from row to row. */}
-
-        {/* The clip's label file, exactly as it sits in groundtruth/. */}
-        {p ? (
-          <a
-            href={api.labelFileUrl(p.id)}
-            download
-            onClick={(e) => e.stopPropagation()}
-            title={`Download the label file for ${v.name}: ${p.eventCount} action${p.eventCount === 1 ? '' : 's'}, as saved`}
-            className="flex w-[50px] items-center justify-center gap-1 rounded-md border border-white/[0.07] py-1 text-2xs font-semibold text-ink-400 transition hover:border-pitch-500/40 hover:bg-pitch-500/10 hover:text-pitch-400"
-          >
-            <Download size={11} /> Labels
-          </a>
-        ) : (
-          <span
-            title="No labels yet: nothing to download"
-            className="w-[50px] py-1 text-center text-2xs text-ink-700"
-          >
-            no labels
-          </span>
-        )}
-
-        {/* The review log, in plain text because it is written to be read; the
-            header has the spreadsheet forms. */}
-        {reviewCount > 0 ? (
-          <a
-            href={api.reviewLogUrl({ clip: v.name, format: 'txt' })}
-            download
-            onClick={(e) => e.stopPropagation()}
-            title={`Download the review log for ${v.name}: ${reviewCount} review${reviewCount === 1 ? '' : 's'}, written out in full`}
-            className="flex w-[46px] items-center justify-center gap-1 rounded-md border border-white/[0.07] py-1 text-2xs font-semibold text-ink-400 transition hover:border-pitch-500/40 hover:bg-pitch-500/10 hover:text-pitch-400"
-          >
-            <Download size={11} /> Log
-          </a>
-        ) : (
-          <span
-            title="No review log: this clip has not been reviewed yet"
-            className="w-[46px] py-1 text-center text-2xs text-ink-700"
-          >
-            no log
-          </span>
-        )}
-      </span>
-
-      <span className="relative flex items-center justify-end">
-        <ArrowRight size={14} className="text-ink-700 transition group-hover:opacity-0" />
-        <span
-          role="button"
           tabIndex={-1}
           title={`Remove ${v.name}`}
           onClick={(e) => { e.stopPropagation(); onDelete(v); }}
-          className="absolute inset-y-0 right-0 grid place-items-center rounded p-1 text-ink-600 opacity-0 transition hover:bg-avoid-500/15 hover:text-avoid-500 group-hover:opacity-100"
+          className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded text-ink-500 opacity-0 transition hover:bg-avoid-500/15 hover:text-avoid-500 group-hover:opacity-100"
         >
           <Trash2 size={14} />
-        </span>
+        </button>
       </span>
     </motion.div>
   );
@@ -768,24 +762,23 @@ export default function Library() {
                   clip name — the only column whose content cannot be guessed — to
                   nothing, and rather than clipping the buttons off the right. */}
               <div className="overflow-x-auto">
-                <div className="min-w-[996px]">
-                <div className={`grid ${GRID} gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600`}>
-                  <span />
+                <div className="min-w-[880px]">
+                {/* The head sits inside the rows' own scroller, held at the top.
+                    Outside it, the rows' scrollbar made them narrower than the head
+                    and every column sat a scrollbar's width left of its name. */}
+                <div className="max-h-[64vh] overflow-y-auto">
+                <div className={`sticky top-0 z-10 grid ${GRID} gap-4 border-b border-white/[0.06] bg-ink-850 px-4 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-400`}>
                   <span>Clip</span>
-                  <span>Type</span>
-                  <span>Assigned to</span>
-                  <span className="text-right">Size</span>
-                  <span className="text-right">Actions</span>
-                  <span>Label mix</span>
-                  <span className="text-right">Open</span>
-                  <span />
+                  <span>Actions</span>
+                  <span>Review</span>
+                  <span>Open</span>
                 </div>
 
-                <div className="max-h-[64vh] overflow-y-auto p-1.5">
+                <div className="divide-y divide-white/[0.04]">
                   {loading ? (
-                    <div className="space-y-1.5 p-1.5">
+                    <div className="space-y-1.5 p-3">
                       {Array.from({ length: 8 }, (_, i) => (
-                        <div key={i} className="skeleton h-10 rounded-lg" />
+                        <div key={i} className="skeleton h-11 rounded-lg" />
                       ))}
                     </div>
                   ) : visible.length === 0 ? (
@@ -801,6 +794,7 @@ export default function Library() {
                         <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} onClearReviewed={clearReviewed} />
                       ))
                   )}
+                </div>
                 </div>
                 </div>
               </div>

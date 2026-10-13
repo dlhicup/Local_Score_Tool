@@ -209,11 +209,17 @@ asks first — OK saves them and moves on, Cancel stays.
 
 ### Reviewing someone else's clip
 
-Every row in the Library has two buttons. **Annotate** opens the clip to label
-it. **Review** opens the same workspace to correct a clip that has already been
-labeled — it is disabled until there is something to correct. Clicking the row
-itself does what **Review** does when the clip has actions, and what
-**Annotate** does when it has none.
+Every row in the Library has two buttons, joined as one control: **Review** and
+**Annotate**. **Annotate** opens the clip to label it. **Review** opens the same
+workspace to correct a clip that has already been labeled — it is disabled until
+there is something to correct. Clicking the row itself does what **Review** does
+when the clip has actions, and what **Annotate** does when it has none; that
+half of the control is the brighter one.
+
+A row reads left to right: the clip, with its type, size, when it was edited and
+who has it on a line underneath; how many actions it has and their mix; where
+its review stands; then the buttons and downloads. The bin to remove a clip
+shows when you hover its row.
 
 The difference is that a review is recorded. While you work, a panel beside the
 picture counts what you have changed: actions added, actions removed, surviving
@@ -251,7 +257,8 @@ saves the clip and signs in one request, so a sign-off can never land without
 the actions it signs off on. The 2nd cannot be signed before the 1st.
 
 Every Library row shows two boxes, **1** and **2**, filled as each review
-passes, with when in the tooltip.
+passes, with when in the tooltip. The review due next is outlined in amber, and
+beside the boxes are the same words the Review filter uses.
 
 What happens to the boxes when somebody changes the actions depends on where
 the change was made:
@@ -284,16 +291,16 @@ back door to saving them.
 
 Each annotated row in the Library has a **⬇ Labels** beside its buttons, which
 downloads that clip's label file without opening it: the file exactly as it
-sits in `groundtruth/`, with its own name. A clip with no actions says
-*no labels* instead. The header of an open clip has the same download, the ⬇
-next to the bin, which gives the file as last saved.
+sits in `groundtruth/`, with its own name. A clip with no actions has no link.
+The header of an open clip has the same download, the ⬇ next to the bin, which
+gives the file as last saved.
 
 ### Downloading the review log
 
 Each row in the Library has a **⬇ Log** beside its buttons, which downloads
-that one clip's history as readable text without opening the clip. A clip that
-has never been reviewed says *no log* instead. The review panel has the same
-link for the clip you have open.
+that one clip's history as readable text without opening the clip. A clip with
+no review recorded has no link. The review panel has the same link for the clip
+you have open.
 
 For more than one clip at a time, the **Review log** control in the Library
 header:
