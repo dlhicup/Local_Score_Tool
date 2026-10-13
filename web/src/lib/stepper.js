@@ -26,13 +26,12 @@ import { REPORTING_FPS } from './fps';
  */
 
 /**
- * Pace while a key is held. OS key repeat is about thirty a second, and with
- * hardware decode the stepper can match that — at which point the frames go
- * by too fast to read. Ten a second is a picture every 100 ms, enough to see
- * each one. Adjustable in Settings; never faster than the decoder can paint,
- * whatever it is set to.
+ * Pace while a key is held: 25 a second by default, the clips' own rate, so a
+ * held arrow plays the clip at its real speed with every frame shown.
+ * Adjustable in Settings, lower to read each frame as it passes; never faster
+ * than the decoder can paint, whatever it is set to.
  */
-let intervalMs = 100;
+let intervalMs = 40;
 
 /**
  * How long a key has to stay down before it starts repeating, so a slightly
@@ -43,7 +42,7 @@ const INITIAL_DELAY_MS = 300;
 /** Steps per second while a key is held. */
 export function setStepRate(fps) {
   const f = Number(fps);
-  intervalMs = Number.isFinite(f) && f > 0 ? Math.max(1000 / 60, 1000 / f) : 100;
+  intervalMs = Number.isFinite(f) && f > 0 ? Math.max(1000 / 60, 1000 / f) : 40;
 }
 
 /** A seek that has produced neither a frame nor `seeked` by then is treated as

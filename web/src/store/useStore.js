@@ -23,9 +23,12 @@ const DEFAULT_SETTINGS = {
   arrowStep: 1,
   // Which default a stored arrow step has been checked against.
   arrowStepDefault: 1,
-  // Steps a second while a stepping key is held. Slow enough to read each
-  // picture; the decoder can go three times faster, which is too fast to.
-  holdStepFps: 10,
+  // Steps a second while a stepping key is held: the clips' own 25, so a held
+  // arrow plays the clip at its real speed, every frame shown. Lower it in
+  // Settings to read each frame as it passes.
+  holdStepFps: 25,
+  // Which default a stored hold speed has been checked against.
+  holdStepDefault: 25,
   pageSize: 50,
   autoAccept: true,
 };
@@ -49,6 +52,14 @@ function loadSettings() {
       if (stored.arrowStep === 4 || stored.arrowStep === 2) merged.arrowStep = DEFAULT_SETTINGS.arrowStep;
       delete merged.arrowStepChecked;
       merged.arrowStepDefault = DEFAULT_SETTINGS.arrowStepDefault;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+    }
+    // The hold speed's default went from 10 to 25, so a held arrow moves like
+    // the video. A 10 saved before then is the old default, not a choice: it
+    // becomes 25, once. A speed picked in Settings afterwards is kept.
+    if (stored.holdStepDefault !== DEFAULT_SETTINGS.holdStepDefault) {
+      if (stored.holdStepFps === 10) merged.holdStepFps = DEFAULT_SETTINGS.holdStepFps;
+      merged.holdStepDefault = DEFAULT_SETTINGS.holdStepDefault;
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
     }
     return merged;
