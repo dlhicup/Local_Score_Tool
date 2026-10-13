@@ -6,6 +6,7 @@ import TagStatus from './TagStatus';
 import ClipNav from './ClipNav';
 import { useStore } from '../store/useStore';
 import { isManager } from '../lib/roles';
+import { libraryPath } from '../lib/libraryFilters';
 
 function RailLink({ to, icon: Icon, label, disabled }) {
   if (disabled) {
@@ -63,14 +64,18 @@ export default function AppShell({ children }) {
   const pid = id ?? project?.id;
   const inProject = Boolean(pid) && location.pathname.startsWith('/p/');
 
+  // Back to the Library with the filters it was left with, on its first page.
+  // On the Library itself, the link is where you already are.
+  const libraryTo = location.pathname === '/' ? `/${location.search}` : libraryPath();
+
   return (
     <div className="flex h-full">
       {/* Navigation rail */}
       <nav className="z-30 flex w-[68px] shrink-0 flex-col items-center gap-2 border-r border-white/[0.06] bg-ink-900/70 py-4 backdrop-blur-xl">
-        <NavLink to="/" className="mb-3" title="Score GT">
+        <NavLink to={libraryTo} className="mb-3" title="Score GT">
           <Logo size={32} />
         </NavLink>
-        <RailLink to="/" icon={LayoutGrid} label="Library" />
+        <RailLink to={libraryTo} icon={LayoutGrid} label="Library" />
         <RailLink to={pid ? `/p/${pid}/annotate` : '#'} icon={ClipboardCheck} label="Annotate" disabled={!pid} />
         <RailLink to="/guide" icon={BookOpen} label="Events guide" />
         <RailLink to="/reference" icon={GraduationCap} label="Reference" />

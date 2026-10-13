@@ -17,6 +17,7 @@ import { useHotkeys } from '../lib/useHotkeys';
 import { labelTitle, UNSURE_KEY } from '../lib/labels';
 import { frameStep, DEFAULT_FPS, REPORTING_FPS } from '../lib/fps';
 import { startStepping, stopStepping, setStepListener, setStepRate } from '../lib/stepper';
+import { libraryPath } from '../lib/libraryFilters';
 
 const NEAR = 0.6; // seconds either side of the playhead counted as "now"
 
@@ -129,7 +130,7 @@ export default function Review({ mode = 'annotate' }) {
       // The server resolves any id that names a real clip, so a failure here
       // means the URL points at nothing — go back to the queue rather than
       // leave an empty workspace sitting on a broken link.
-      if (!p) navigate('/', { replace: true });
+      if (!p) navigate(libraryPath(), { replace: true });
     });
   }, [id, project, openProject, deleting, navigate, reviewing]);
 
@@ -286,7 +287,7 @@ export default function Review({ mode = 'annotate' }) {
     setDeleting(true);
     try {
       await deleteCurrentProject();
-      navigate('/');
+      navigate(libraryPath());
     } catch (err) {
       toast(err.message, 'error');
       setDeleting(false);

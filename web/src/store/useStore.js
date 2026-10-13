@@ -3,6 +3,7 @@ import { api, getToken, setToken, setUnauthorizedHandler } from '../lib/api';
 import { EVENT_LABELS, LABEL_META } from '../lib/labels';
 import { reviewDiff, tallyTotal } from '../lib/review';
 import { saveVideo, loadVideo } from '../lib/db';
+import { forgetLibraryFilters } from '../lib/libraryFilters';
 
 const SETTINGS_KEY = 'scoregt.settings';
 const HOTKEYS_KEY = 'scoregt.hotkeys';
@@ -73,6 +74,7 @@ export const useStore = create((set, get) => ({
 
   signOut: () => {
     setToken('');
+    forgetLibraryFilters(); // whoever signs in next in this tab starts with the full list
     get().releaseVideo();
     set({ user: null, project: null, events: [], projects: [] });
   },

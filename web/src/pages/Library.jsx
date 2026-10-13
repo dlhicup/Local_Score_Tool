@@ -11,6 +11,7 @@ import { api } from '../lib/api';
 import { EVENT_LABELS, LABEL_META, labelTitle } from '../lib/labels';
 import { bytes, relativeTime } from '../lib/format';
 import { saveQueue } from '../lib/queue';
+import { FILTER_PARAMS, recallLibraryFilters, rememberLibraryFilters } from '../lib/libraryFilters';
 
 
 const STATUS = {
@@ -337,7 +338,7 @@ export default function Library() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(null); // {name, pct} while importing
   const fileInput = useRef(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => recallLibraryFilters().q ?? '');
   const [opening, setOpening] = useState(null);
   const pageSize = useStore((s) => s.settings.pageSize) || 50;
 
@@ -345,9 +346,9 @@ export default function Library() {
    * The page lives in the URL, not in component state.
    *
    * That is what makes it survive a refresh — the address is unchanged, so the
-   * same page comes back. Opening a clip and returning navigates to a fresh
-   * address with no page param, which resets to the first page, exactly as
-   * asked for.
+   * same page comes back. Coming back from a clip goes to an address with the
+   * filters but no page param, so it starts again at the first page, as asked
+   * for.
    */
   const [params, setParams] = useSearchParams();
   const page = Math.max(1, Number(params.get('page')) || 1);
@@ -380,6 +381,34 @@ export default function Library() {
     for (const k of ['cat', 'st', 'rev', 'page']) next.delete(k);
     setParams(next, { replace: true });
   };
+
+  /**
+   * Remember the filters and the search for this tab, so every way back from
+   * a clip finds them as they were left: the rail's Library link and the logo
+   * carry them, and the browser's Back has them in the address.
+   *
+   * A Library opened at a bare address (typed in, or after a clip's ground
+   * truth is deleted) takes the remembered ones; an address that names a
+   * filter of its own is taken as it is. A plain effect, not a layout one: on
+   * a fresh page load the router only starts listening after the layout
+   * effects, and a change of address made before then would be lost.
+   */
+  const arrived = useRef(true);
+  useEffect(() => {
+    const first = arrived.current;
+    arrived.current = false;
+    if (first && !FILTER_PARAMS.some((k) => params.has(k))) {
+      const saved = recallLibraryFilters();
+      if (FILTER_PARAMS.some((k) => saved[k])) {
+        const next = new URLSearchParams(params);
+        for (const k of FILTER_PARAMS) if (saved[k]) next.set(k, saved[k]);
+        next.delete('page');
+        setParams(next, { replace: true });
+        return; // remembered on the next pass, once the address has them
+      }
+    }
+    rememberLibraryFilters({ cat: category, st: status, rev: review, q: query });
+  }, [params, setParams, category, status, review, query]);
 
   const deleteVideo = async (v) => {
     const labeled = v.project?.eventCount ? ` and its ${v.project.eventCount} saved action${v.project.eventCount === 1 ? '' : 's'}` : '';

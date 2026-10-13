@@ -189,8 +189,10 @@ Three filters run down the left of the Library list, and they combine:
 
 Every count is counted within the type you picked, so **30s clips → Needs 1st
 review** shows exactly how many 30-second clips are waiting, and lists them.
-The filters live in the address bar, so a refresh — or coming back from a
-clip — finds the list the way you left it.
+The filters and the search stay as you left them for as long as the tab is
+open: a refresh, the browser's Back, the rail's Library link and the logo all
+bring them back. Coming back from a clip starts at the first page, where the
+clips still to do are. **Clear filters** resets the lot.
 
 ### Moving between clips
 
