@@ -176,14 +176,14 @@ it. None of it blocks a save.
 
 ### Finding clips: type, status, review
 
-Three filters sit above the Library list, and they combine:
+Three filters run down the left of the Library list, and they combine:
 
 - **Type** — the folder a clip sits in under `video/`. `video/Full match/`,
   `video/30s clips/` and `video/gt/` give you those three filters; any other
   folder you make becomes a filter of its own, with nothing to configure. A clip
   loose at the top of `video/` shows as **Unsorted**. Only the first folder
   counts, so a type can have subfolders of its own.
-- **Status** — the tiles: all clips, not started, annotated.
+- **Status** — all clips, not started, annotated.
 - **Review** — needs 1st review, needs 2nd review, both passed. Only clips with
   labels are counted here: a clip with nothing on it has nothing to review.
 

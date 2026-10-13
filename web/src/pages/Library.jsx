@@ -37,11 +37,18 @@ const TINTS = [
   'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
   'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
 ];
-function typeTint(key) {
-  if (key === UNSORTED) return 'border-white/10 bg-white/[0.03] text-ink-500';
+const DOTS = ['bg-sky-400', 'bg-violet-400', 'bg-teal-400', 'bg-fuchsia-400', 'bg-indigo-400', 'bg-cyan-400'];
+function tintIndex(key) {
   let h = 0;
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return TINTS[h % TINTS.length];
+  return h % TINTS.length;
+}
+function typeTint(key) {
+  return key === UNSORTED ? 'border-white/10 bg-white/[0.03] text-ink-500' : TINTS[tintIndex(key)];
+}
+/** The same colour as the folder's pill in the rows, as a dot for the filter. */
+function typeDot(key) {
+  return key === UNSORTED ? 'bg-ink-500' : DOTS[tintIndex(key)];
 }
 
 /**
@@ -65,30 +72,48 @@ function reviewBucket(v) {
  * One grid for the head and every row, written out in full so Tailwind sees
  * the class — a class built from pieces at runtime is never generated.
  */
-const GRID = 'grid-cols-[20px_minmax(0,1fr)_52px_72px_64px_56px_64px_248px_20px]';
+const GRID = 'grid-cols-[20px_minmax(0,1fr)_80px_88px_64px_56px_64px_248px_20px]';
 
-/** A row of mutually exclusive choices, each with how many it would show. */
-function Segmented({ label, options, value, onChange }) {
+/**
+ * One group of the filter column: a title, then each choice as a full-width
+ * row with how many clips it would show. The chosen one is lit. A `mark` is
+ * whatever helps the eye find it — a folder's colour, a review box.
+ */
+function FilterGroup({ title, options, value, onChange }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {label && <span className="mr-1 text-2xs font-semibold uppercase tracking-wider text-ink-500">{label}</span>}
-      {options.map((o) => (
-        <button
-          key={o.key}
-          onClick={() => onChange(o.key)}
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition ${
-            value === o.key
-              ? 'border-pitch-500/40 bg-pitch-500/[0.10] text-white'
-              : 'border-white/[0.07] text-ink-300 hover:border-white/20 hover:text-white'
-          }`}
-        >
-          {o.label}
-          {o.count !== undefined && (
-            <span className={`font-mono text-2xs tabular ${value === o.key ? 'text-pitch-400' : 'text-ink-500'}`}>{o.count}</span>
-          )}
-        </button>
-      ))}
-    </div>
+    <section>
+      <h3 className="mb-1.5 px-2 text-2xs font-semibold uppercase tracking-wider text-ink-500">{title}</h3>
+      <div className="space-y-0.5">
+        {options.map((o) => {
+          const on = value === o.key;
+          return (
+            <button
+              key={o.key}
+              onClick={() => onChange(o.key)}
+              aria-pressed={on}
+              className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition ${
+                on ? 'bg-pitch-500/[0.12] text-white' : 'text-ink-300 hover:bg-white/[0.05] hover:text-white'
+              }`}
+            >
+              {o.mark && <span className="flex w-5 shrink-0 justify-center">{o.mark}</span>}
+              <span className="min-w-0 flex-1 truncate">{o.label}</span>
+              <span className={`font-mono text-2xs tabular ${on ? 'text-pitch-400' : 'text-ink-500'}`}>{o.count}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** The two review boxes in miniature, so the Review filter reads like the rows. */
+function MiniBoxes({ level }) {
+  const box = 'h-2 w-2 rounded-[2px]';
+  return (
+    <span className="flex gap-[2px]">
+      <span className={`${box} ${level >= 1 ? 'bg-pitch-500' : 'border border-white/25'}`} />
+      <span className={`${box} ${level >= 2 ? 'bg-pitch-500' : 'border border-white/25'}`} />
+    </span>
   );
 }
 
@@ -136,19 +161,6 @@ function ReviewBoxes({ v, p, onClear }) {
   );
 }
 
-function StatTile({ label, value, tone, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`panel-inset flex-1 px-4 py-3 text-left transition ${
-        active ? 'border-pitch-500/40 bg-pitch-500/[0.07]' : 'hover:border-white/15'
-      }`}
-    >
-      <p className={`font-mono text-2xl font-bold leading-none tabular ${tone}`}>{value}</p>
-      <p className="label-text mt-1.5">{label}</p>
-    </button>
-  );
-}
 
 function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
   const type = typeOf(v);
@@ -286,14 +298,14 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
             download
             onClick={(e) => e.stopPropagation()}
             title={`Download the review log for ${v.name}: ${reviewCount} review${reviewCount === 1 ? '' : 's'}, written out in full`}
-            className="flex items-center gap-1 rounded-md border border-white/[0.07] px-1.5 py-1 text-2xs font-semibold text-ink-400 transition hover:border-pitch-500/40 hover:bg-pitch-500/10 hover:text-pitch-400"
+            className="flex w-[46px] items-center justify-center gap-1 rounded-md border border-white/[0.07] py-1 text-2xs font-semibold text-ink-400 transition hover:border-pitch-500/40 hover:bg-pitch-500/10 hover:text-pitch-400"
           >
             <Download size={11} /> Log
           </a>
         ) : (
           <span
             title="No review log: this clip has not been reviewed yet"
-            className="px-1.5 py-1 text-2xs text-ink-700"
+            className="w-[46px] py-1 text-center text-2xs text-ink-700"
           >
             no log
           </span>
@@ -360,6 +372,14 @@ export default function Library() {
     setParams(next, { replace: true });
   };
   const setStatus = (v) => setFilter('st', v);
+
+  const filtered = category !== 'all' || status !== 'all' || review !== 'all' || query.trim() !== '';
+  const clearFilters = () => {
+    setQuery('');
+    const next = new URLSearchParams(params);
+    for (const k of ['cat', 'st', 'rev', 'page']) next.delete(k);
+    setParams(next, { replace: true });
+  };
 
   const deleteVideo = async (v) => {
     const labeled = v.project?.eventCount ? ` and its ${v.project.eventCount} saved action${v.project.eventCount === 1 ? '' : 's'}` : '';
@@ -505,7 +525,7 @@ export default function Library() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-6 py-8">
+      <div className="mx-auto max-w-7xl px-6 py-8">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-pitch-500/25 bg-pitch-500/[0.08] px-3 py-1">
@@ -619,141 +639,157 @@ export default function Library() {
           </div>
         </header>
 
-        {/* Which kind of clip. Everything below is counted within it. */}
-        {data && (
-          <div className="mb-3">
-            <Segmented
-              label="Type"
-              value={category}
-              onChange={(v) => setFilter('cat', v)}
-              options={[
-                { key: 'all', label: 'All', count: counts.cat.all },
-                ...types.map((k) => ({ key: k, label: typeLabel(k), count: counts.cat[k] ?? 0 })),
-              ]}
-            />
-          </div>
-        )}
-
-        {/* Progress within the chosen type, doubling as the status filter */}
-        {data && (
-          <div className="mb-3 flex gap-2">
-            <StatTile label="Clips" value={counts.st.all} tone="text-white" active={status === 'all'} onClick={() => setStatus('all')} />
-            <StatTile label="Not started" value={counts.st.todo} tone="text-ink-300" active={status === 'todo'} onClick={() => setStatus('todo')} />
-            <StatTile label="Annotated" value={counts.st.done} tone="text-pitch-400" active={status === 'done'} onClick={() => setStatus('done')} />
-          </div>
-        )}
-
-        {/* Where clips are in the two-step review, within the chosen type. */}
-        {data && (
-          <div className="mb-5">
-            <Segmented
-              label="Review"
-              value={review}
-              onChange={(v) => setFilter('rev', v)}
-              options={REVIEW_FILTERS.map((f) => ({
-                key: f.key,
-                label: f.label,
-                count: f.key === 'all' ? undefined : counts.rev[f.key],
-              }))}
-            />
-          </div>
-        )}
-
-        <div className="panel flex min-h-0 flex-col overflow-hidden">
-          <div className="border-b border-white/[0.06] p-3">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-500" />
-              <input
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setPage(1);
-                }}
-                placeholder={`Search ${inCategory.length} clips by filename…`}
-                className="field py-2 pl-9 text-xs"
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+          {/* The filters, down the left. They combine, the type is the outermost
+              choice, and every count under it is counted within it — so
+              "30s clips" then "Needs 1st review" says how many of those there are.
+              On a narrow window the three groups sit side by side above the list. */}
+          {data && (
+            <aside className="grid grid-cols-3 gap-4 lg:w-52 lg:shrink-0 lg:grid-cols-1 lg:gap-5">
+              <FilterGroup
+                title="Type"
+                value={category}
+                onChange={(v) => setFilter('cat', v)}
+                options={[
+                  { key: 'all', label: 'All clips', count: counts.cat.all },
+                  ...types.map((k) => ({
+                    key: k,
+                    label: typeLabel(k),
+                    count: counts.cat[k] ?? 0,
+                    mark: <span className={`h-2 w-2 rounded-full ${typeDot(k)}`} />,
+                  })),
+                ]}
               />
-            </div>
-          </div>
-
-          {/* One horizontal scroller around the head and the rows together, so
-              a narrow window scrolls them in step rather than collapsing the
-              clip name — the only column whose content cannot be guessed — to
-              nothing, and rather than clipping the buttons off the right. */}
-          <div className="overflow-x-auto">
-            <div className="min-w-[968px]">
-            <div className={`grid ${GRID} gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600`}>
-              <span />
-              <span>Clip</span>
-              <span>Type</span>
-              <span>Assigned to</span>
-              <span className="text-right">Size</span>
-              <span className="text-right">Actions</span>
-              <span>Label mix</span>
-              <span className="text-right">Open</span>
-              <span />
-            </div>
-
-            <div className="max-h-[52vh] overflow-y-auto p-1.5">
-              {loading ? (
-                <div className="space-y-1.5 p-1.5">
-                  {Array.from({ length: 8 }, (_, i) => (
-                    <div key={i} className="skeleton h-10 rounded-lg" />
-                  ))}
-                </div>
-              ) : visible.length === 0 ? (
-                <div className="flex flex-col items-center px-6 py-14 text-center">
-                  <Film size={24} className="mb-3 text-ink-600" />
-                  <p className="text-xs font-medium text-ink-300">
-                    {data?.videos?.length ? 'No clip matches' : 'No videos found'}
-                  </p>
-                  <p className="mt-1 font-mono text-2xs text-ink-600">{data?.dir}</p>
-                </div>
-              ) : (
-                pageItems.map((v) => (
-                    <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} onClearReviewed={clearReviewed} />
-                  ))
+              <FilterGroup
+                title="Status"
+                value={status}
+                onChange={setStatus}
+                options={[
+                  { key: 'all', label: 'All', count: counts.st.all },
+                  { key: 'todo', label: 'Not started', count: counts.st.todo, mark: <Circle size={11} className="text-ink-500" /> },
+                  { key: 'done', label: 'Annotated', count: counts.st.done, mark: <CheckCircle2 size={11} className="text-pitch-400" /> },
+                ]}
+              />
+              <FilterGroup
+                title="Review"
+                value={review}
+                onChange={(v) => setFilter('rev', v)}
+                options={REVIEW_FILTERS.map((f) => ({
+                  key: f.key,
+                  label: f.label,
+                  count: f.key === 'all' ? counts.rev.all : counts.rev[f.key],
+                  mark: f.key === 'all' ? null : <MiniBoxes level={{ need1: 0, need2: 1, done: 2 }[f.key]} />,
+                }))}
+              />
+              {filtered && (
+                <button
+                  onClick={clearFilters}
+                  className="col-span-3 justify-self-start px-2 text-2xs text-ink-500 underline underline-offset-2 transition hover:text-ink-200 lg:col-span-1"
+                >
+                  Clear filters
+                </button>
               )}
-            </div>
-            </div>
-          </div>
+            </aside>
+          )}
 
-          <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] px-3 py-2 text-2xs text-ink-500">
-            <span>
-              <span className="font-mono text-ink-200">
-                {visible.length ? (safePage - 1) * pageSize + 1 : 0}–{Math.min(safePage * pageSize, visible.length)}
-              </span>{' '}
-              of <span className="font-mono text-ink-200">{visible.length}</span>
-            </span>
-            {opening && <span className="text-pitch-400">opening {opening}…</span>}
+          <div className="min-w-0 flex-1">
+            <div className="panel flex min-h-0 flex-col overflow-hidden">
+              <div className="border-b border-white/[0.06] p-3">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-500" />
+                  <input
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder={`Search ${inCategory.length} clips by filename…`}
+                    className="field py-2 pl-9 text-xs"
+                  />
+                </div>
+              </div>
 
-            <div className="ml-auto flex items-center gap-1">
-              <button
-                onClick={() => setPage(safePage - 1)}
-                disabled={safePage <= 1}
-                className="rounded-md p-1 text-ink-400 transition hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
-                title="Previous page"
-              >
-                <ChevronLeft size={14} />
-              </button>
+              {/* One horizontal scroller around the head and the rows together, so
+                  a narrow window scrolls them in step rather than collapsing the
+                  clip name — the only column whose content cannot be guessed — to
+                  nothing, and rather than clipping the buttons off the right. */}
+              <div className="overflow-x-auto">
+                <div className="min-w-[968px]">
+                <div className={`grid ${GRID} gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600`}>
+                  <span />
+                  <span>Clip</span>
+                  <span>Type</span>
+                  <span>Assigned to</span>
+                  <span className="text-right">Size</span>
+                  <span className="text-right">Actions</span>
+                  <span>Label mix</span>
+                  <span className="text-right">Open</span>
+                  <span />
+                </div>
 
-              <input
-                type="number"
-                min={1}
-                max={pageCount}
-                value={safePage}
-                onChange={(e) => setPage(Math.min(pageCount, Math.max(1, Number(e.target.value) || 1)))}
-                className="w-12 rounded-md border border-white/10 bg-ink-900/80 py-0.5 text-center font-mono text-2xs text-ink-100 tabular"
-              />
-              <span className="font-mono text-ink-600">/ {pageCount}</span>
+                <div className="max-h-[64vh] overflow-y-auto p-1.5">
+                  {loading ? (
+                    <div className="space-y-1.5 p-1.5">
+                      {Array.from({ length: 8 }, (_, i) => (
+                        <div key={i} className="skeleton h-10 rounded-lg" />
+                      ))}
+                    </div>
+                  ) : visible.length === 0 ? (
+                    <div className="flex flex-col items-center px-6 py-14 text-center">
+                      <Film size={24} className="mb-3 text-ink-600" />
+                      <p className="text-xs font-medium text-ink-300">
+                        {data?.videos?.length ? 'No clip matches' : 'No videos found'}
+                      </p>
+                      <p className="mt-1 font-mono text-2xs text-ink-600">{data?.dir}</p>
+                    </div>
+                  ) : (
+                    pageItems.map((v) => (
+                        <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} onClearReviewed={clearReviewed} />
+                      ))
+                  )}
+                </div>
+                </div>
+              </div>
 
-              <button
-                onClick={() => setPage(safePage + 1)}
-                disabled={safePage >= pageCount}
-                className="rounded-md p-1 text-ink-400 transition hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
-                title="Next page"
-              >
-                <ChevronRight size={14} />
-              </button>
+              <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] px-3 py-2 text-2xs text-ink-500">
+                <span>
+                  <span className="font-mono text-ink-200">
+                    {visible.length ? (safePage - 1) * pageSize + 1 : 0}–{Math.min(safePage * pageSize, visible.length)}
+                  </span>{' '}
+                  of <span className="font-mono text-ink-200">{visible.length}</span>
+                </span>
+                {opening && <span className="text-pitch-400">opening {opening}…</span>}
+
+                <div className="ml-auto flex items-center gap-1">
+                  <button
+                    onClick={() => setPage(safePage - 1)}
+                    disabled={safePage <= 1}
+                    className="rounded-md p-1 text-ink-400 transition hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                    title="Previous page"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+
+                  <input
+                    type="number"
+                    min={1}
+                    max={pageCount}
+                    value={safePage}
+                    onChange={(e) => setPage(Math.min(pageCount, Math.max(1, Number(e.target.value) || 1)))}
+                    className="w-12 rounded-md border border-white/10 bg-ink-900/80 py-0.5 text-center font-mono text-2xs text-ink-100 tabular"
+                  />
+                  <span className="font-mono text-ink-600">/ {pageCount}</span>
+
+                  <button
+                    onClick={() => setPage(safePage + 1)}
+                    disabled={safePage >= pageCount}
+                    className="rounded-md p-1 text-ink-400 transition hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                    title="Next page"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
