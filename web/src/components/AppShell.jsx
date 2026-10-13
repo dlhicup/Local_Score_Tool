@@ -105,6 +105,14 @@ export default function AppShell({ children }) {
                     Reviewing
                   </span>
                 )}
+                {project.meta?.ignored && (
+                  <span
+                    title={`Ignored: ${project.meta.ignored.reason || 'no reason given'}`}
+                    className="shrink-0 rounded-full border border-rose-500/40 bg-rose-500/[0.10] px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-rose-300"
+                  >
+                    Ignored
+                  </span>
+                )}
                 <ClipNav />
               </div>
 

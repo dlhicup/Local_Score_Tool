@@ -99,6 +99,13 @@ export const api = {
   clearReviewed: (id, stage = null) =>
     request(`/projects/${encodeURIComponent(id)}/reviewed${stage ? `?stage=${stage}` : ''}`, { method: 'DELETE' }),
 
+  // Setting a clip aside as too poor to work on, and taking that back. Their
+  // own routes, like the review marks, so edits on screen are never saved
+  // along with them.
+  ignoreClip: (id, reason) =>
+    request(`/projects/${encodeURIComponent(id)}/ignored`, { method: 'PUT', body: { reason } }),
+  unignoreClip: (id) => request(`/projects/${encodeURIComponent(id)}/ignored`, { method: 'DELETE' }),
+
   // `reviewing` says the save came from the review page, which decides what
   // a change does to the clip's review marks — see the save route.
   saveProject: (id, project, { review = null, finishReview = false, reviewing = false } = {}) =>

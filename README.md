@@ -287,6 +287,30 @@ Either way only the mark goes. The actions are not rewritten, and if you are
 holding unsaved edits when you unmark, they stay unsaved — unmarking is not a
 back door to saving them.
 
+### Ignoring a clip
+
+Some clips are too poor to label well: too dark, out of focus, the camera
+pointing the wrong way. A reviewer sets one aside with **Ignore this clip** at
+the bottom of the review panel, and says why. *Poor video quality* is filled in
+already. The clip then leaves *Needs 1st review*, *Needs 2nd review* and
+*Both passed*, and is listed under **Ignored** in the Library's Review filter,
+with the reason under its name. Its actions and its review marks are left as
+they were, and edits on screen are not saved along with it.
+
+**Stop ignoring** in the review panel, or clicking *Ignored* on its row, puts it
+back exactly where it was.
+
+### Where the review marks are kept
+
+Each clip's marks live in **`Review.<clip>.json`**, next to its label file in
+`groundtruth/`: `firstReview` and `secondReview` when they pass, and `ignored`
+when it is set aside, each saying who and when, and `ignored` also why. The
+Library reads these files to fill the Review filter, so there is no separate
+database to keep in step, and copying a clip's files elsewhere takes its marks
+with them. The review log download says which clips are ignored and why: the
+`_index.csv` in the per-video zip has `ignored`, `ignored_reason` and
+`ignored_at` columns, and each clip's text log says so at the top.
+
 ### Downloading a clip's labels
 
 Each annotated row in the Library has a **⬇ Labels** beside its buttons, which

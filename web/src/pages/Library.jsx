@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Search, CheckCircle2, Circle, Film,
   ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2, Trash2,
-  Download,
+  Download, EyeOff,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { api } from '../lib/api';
@@ -43,14 +43,19 @@ function typeDot(key) {
  * Where a clip is in the two-step review. Only a clip with labels has a place
  * in it at all: one with none has nothing to review, and showing it under
  * "needs 1st review" would bury the clips that actually do.
+ *
+ * A clip a reviewer set aside as too poor to work on is out of the review
+ * altogether, whatever its marks say, and listed under Ignored instead.
  */
 const REVIEW_FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'need1', label: 'Needs 1st review' },
   { key: 'need2', label: 'Needs 2nd review' },
   { key: 'done', label: 'Both passed' },
+  { key: 'ignored', label: 'Ignored' },
 ];
 function reviewBucket(v) {
+  if (v.project?.ignored) return 'ignored';
   if (!v.project?.eventCount) return null;
   const level = v.project.reviewLevel ?? 0;
   return level === 0 ? 'need1' : level === 1 ? 'need2' : 'done';
@@ -117,13 +122,16 @@ function MiniBoxes({ level }) {
  * what is waiting stands out; one that cannot happen yet stays faint. Beside
  * them, the same words the Review filter uses.
  */
-function ReviewBoxes({ v, p, onClear }) {
+function ReviewBoxes({ v, p, onClear, onUnignore }) {
   const level = p?.reviewLevel ?? 0;
   const stamps = [p?.firstReview ?? null, p?.secondReview ?? null];
   const words = !p ? null : level === 0 ? 'Needs 1st' : level === 1 ? 'Needs 2nd' : 'Both passed';
+  // Set aside as too poor to work on: the marks are kept but faded, and
+  // "Ignored" stands where the words would, putting it back when clicked.
+  const ignored = v.project?.ignored ?? null;
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <span className="flex shrink-0 items-center gap-[3px]">
+      <span className={`flex shrink-0 items-center gap-[3px] ${ignored ? 'opacity-40' : ''}`}>
         {[1, 2].map((n) => {
           const name = n === 1 ? '1st review' : '2nd review';
           const box = 'grid h-[18px] w-[18px] place-items-center rounded font-mono text-[10px] font-bold';
@@ -153,7 +161,19 @@ function ReviewBoxes({ v, p, onClear }) {
           );
         })}
       </span>
-      {words && <span className={`truncate text-2xs ${level === 2 ? 'text-pitch-400' : 'text-ink-300'}`}>{words}</span>}
+      {ignored ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onUnignore(v); }}
+          title={`Ignored: ${ignored.reason || 'no reason given'}${ignored.at ? `, ${relativeTime(ignored.at)}` : ''}${ignored.by ? ` by ${ignored.by}` : ''}. Click to put it back in the review lists.`}
+          className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-2xs font-medium text-rose-300 transition hover:bg-rose-500/15"
+        >
+          <EyeOff size={11} className="shrink-0" />
+          <span className="truncate">Ignored</span>
+        </button>
+      ) : (
+        words && <span className={`truncate text-2xs ${level === 2 ? 'text-pitch-400' : 'text-ink-300'}`}>{words}</span>
+      )}
     </span>
   );
 }
@@ -172,7 +192,7 @@ const PROXY_NOTE = {
  * its type, size, when it was edited and who has it, is one quiet line under
  * the name, so the columns hold only what changes from row to row.
  */
-function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
+function TaskRow({ v, onOpen, onDelete, onClearReviewed, onUnignore }) {
   const type = typeOf(v);
   // A project with no events is not "0% reviewed" — there is nothing to review
   // yet. Treat it as untouched everywhere it shows up.
@@ -240,6 +260,12 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
               <span className="truncate text-ink-300" title={`Assigned to ${v.assignedTo}`}>{v.assignedTo}</span>
             </>
           )}
+          {v.project?.ignored && (
+            <>
+              <span className="text-ink-600">·</span>
+              <span className="truncate text-rose-300/80">ignored: {v.project.ignored.reason || 'no reason given'}</span>
+            </>
+          )}
         </span>
       </span>
 
@@ -263,7 +289,7 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
       </span>
 
       {/* Where its review stands */}
-      <ReviewBoxes v={v} p={p} onClear={onClearReviewed} />
+      <ReviewBoxes v={v} p={p} onClear={onClearReviewed} onUnignore={onUnignore} />
 
       {/* Open it either way, take its files, or remove it */}
       <span className="flex items-center gap-1">
@@ -455,6 +481,19 @@ export default function Library() {
     }
   };
 
+  /** Put an ignored clip back in the review lists, from its row. */
+  const unignore = async (v) => {
+    const why = v.project?.ignored?.reason;
+    if (!window.confirm(`Put ${v.name} back in the review lists?${why ? ` It was ignored for: ${why}.` : ''} Its actions and review marks are as they were.`)) return;
+    try {
+      await api.unignoreClip(v.project.id);
+      toast(`${v.name} is back in the review lists`, 'success');
+      await load();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
   const importVideo = async (file) => {
     if (!file) return;
     if (!/\.(mp4|webm|mov|mkv|m4v)$/i.test(file.name)) return toast('Pick a video file (mp4, webm, mov, mkv)', 'error');
@@ -511,7 +550,7 @@ export default function Library() {
   const counts = useMemo(() => {
     const cat = { all: all.length };
     for (const v of all) cat[typeOf(v)] = (cat[typeOf(v)] ?? 0) + 1;
-    const rev = { all: inCategory.length, need1: 0, need2: 0, done: 0 };
+    const rev = { all: inCategory.length, need1: 0, need2: 0, done: 0, ignored: 0 };
     const st = { all: inCategory.length, todo: 0, done: 0 };
     for (const v of inCategory) {
       const b = reviewBucket(v);
@@ -559,7 +598,7 @@ export default function Library() {
 
   /** The point of a queue: skip the picker and go straight to the next clip. */
   const openNext = () => {
-    const next = inCategory.find((v) => v.status === 'todo');
+    const next = inCategory.find((v) => v.status === 'todo' && !v.project?.ignored);
     if (next) open(next);
     else toast('Every clip has ground truth', 'success');
   };
@@ -726,7 +765,11 @@ export default function Library() {
                   key: f.key,
                   label: f.label,
                   count: f.key === 'all' ? counts.rev.all : counts.rev[f.key],
-                  mark: f.key === 'all' ? null : <MiniBoxes level={{ need1: 0, need2: 1, done: 2 }[f.key]} />,
+                  mark: f.key === 'all'
+                    ? null
+                    : f.key === 'ignored'
+                      ? <EyeOff size={11} className="text-rose-300" />
+                      : <MiniBoxes level={{ need1: 0, need2: 1, done: 2 }[f.key]} />,
                 }))}
               />
               {filtered && (
@@ -791,7 +834,7 @@ export default function Library() {
                     </div>
                   ) : (
                     pageItems.map((v) => (
-                        <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} onClearReviewed={clearReviewed} />
+                        <TaskRow key={v.name} v={v} onOpen={open} onDelete={deleteVideo} onClearReviewed={clearReviewed} onUnignore={unignore} />
                       ))
                   )}
                 </div>

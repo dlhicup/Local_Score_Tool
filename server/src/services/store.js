@@ -168,6 +168,7 @@ export async function projectForClip(filename) {
       reviewLevel: reviewLevel(review),
       firstReview: review.firstReview,
       secondReview: review.secondReview,
+      ignored: review.ignored ?? null,
     },
   };
 }
@@ -209,6 +210,7 @@ export async function listProjects() {
       reviewLevel: status.level,
       firstReview: status.firstReview,
       secondReview: status.secondReview,
+      ignored: status.ignored ?? null,
       // Just the count: a row needs to know whether there is a log to offer,
       // not what is in it.
       reviewCount: status.reviewCount,

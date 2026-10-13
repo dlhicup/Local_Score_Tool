@@ -6,6 +6,7 @@ import {
 import { summarise } from '../services/merge.js';
 import { sanitiseEvent, rowFor, groundTruthExists, findGroundTruth, toFrame, REPORTING_FPS } from '../services/gtfile.js';
 import { getAssignments } from '../services/users.js';
+import { setIgnored } from '../services/reviewfile.js';
 import { reviewEntry, sameActions } from '../services/reviewlog.js';
 import { requireAuth } from '../middleware/auth.js';
 import { EVENT_LABELS } from '../labels.js';
@@ -83,6 +84,39 @@ router.delete('/projects/:id/reviewed', requireAuth, async (req, res, next) => {
       secondReview: stored.meta?.secondReview ?? null,
       changed: true,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Set a clip aside: the picture is too poor to label or review, so it should
+ * stop turning up as work. Kept in the clip's review file beside its review
+ * marks, saying who, when and why, and taken off again with DELETE.
+ *
+ * Its own route, like the review marks: a reviewer with unsaved edits on
+ * screen can set a clip aside without those edits being written along with
+ * it. Its actions and review marks are left exactly as they are.
+ */
+router.put('/projects/:id/ignored', requireAuth, async (req, res, next) => {
+  try {
+    const project = await resolveProject(req.params.id);
+    if (!(await mayTouch(req.user, project))) return res.status(403).json({ error: 'This clip is not assigned to you' });
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 200) || 'Poor video quality';
+    const ignored = { by: req.user?.username ?? null, at: new Date().toISOString(), reason };
+    await setIgnored(project.video.filename, ignored);
+    res.json({ ignored });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/projects/:id/ignored', requireAuth, async (req, res, next) => {
+  try {
+    const project = await resolveProject(req.params.id);
+    if (!(await mayTouch(req.user, project))) return res.status(403).json({ error: 'This clip is not assigned to you' });
+    await setIgnored(project.video.filename, null);
+    res.json({ ignored: null });
   } catch (err) {
     next(err);
   }

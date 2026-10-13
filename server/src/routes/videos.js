@@ -179,6 +179,8 @@ router.get('/videos', requireAuth, async (req, res, next) => {
               reviewLevel: p.reviewLevel ?? 0,
               firstReview: p.firstReview ?? null,
               secondReview: p.secondReview ?? null,
+              // Set aside as too poor to work on: who, when and why.
+              ignored: p.ignored ?? null,
               // Whether this clip has a review log worth downloading.
               reviewCount: p.reviewCount ?? 0,
             }

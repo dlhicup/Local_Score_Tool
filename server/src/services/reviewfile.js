@@ -58,6 +58,7 @@ const emptyDoc = (videoName) => ({
   notes: [],
   firstReview: null,
   secondReview: null,
+  ignored: null,
 });
 
 /**
@@ -110,6 +111,9 @@ function normalise(doc, videoName) {
     notes: Array.isArray(doc?.notes) ? doc.notes.filter((x) => typeof x === 'string') : [],
     firstReview: first,
     secondReview: first ? asStamp(doc?.secondReview) : null,
+    // Set aside as too poor to work on: who, when and why. Independent of the
+    // review marks, which it leaves as they are.
+    ignored: asStamp(doc?.ignored),
   };
 }
 
@@ -156,7 +160,7 @@ async function persist(videoName, doc) {
   const target = await reviewPathFor(videoName);
   if (!target) return null;
 
-  if (!doc.changes.length && !doc.notes.length && !doc.firstReview && !doc.reviews) {
+  if (!doc.changes.length && !doc.notes.length && !doc.firstReview && !doc.reviews && !doc.ignored) {
     await fs.unlink(target).catch((e) => { if (e.code !== 'ENOENT') throw e; });
     return { path: target, removed: true };
   }
@@ -176,6 +180,7 @@ async function persist(videoName, doc) {
   head.push(`  "totals": ${JSON.stringify(doc.totals)}`);
   if (doc.firstReview) head.push(`  "firstReview": ${JSON.stringify(doc.firstReview)}`);
   if (doc.firstReview && doc.secondReview) head.push(`  "secondReview": ${JSON.stringify(doc.secondReview)}`);
+  if (doc.ignored) head.push(`  "ignored": ${JSON.stringify(doc.ignored)}`);
   if (doc.notes.length) {
     head.push(`  "notes": [\n${doc.notes.map((n) => `    ${JSON.stringify(n)}`).join(',\n')}\n  ]`);
   }
@@ -234,6 +239,17 @@ export async function setReviewStages(videoName, { first, second } = {}) {
   return persist(videoName, doc);
 }
 
+/**
+ * Set a clip aside as too poor to work on, or take that back with null. The
+ * stamp says who, when and why. The review marks stay as they are, so a clip
+ * that is taken back picks up exactly where it was.
+ */
+export async function setIgnored(videoName, stamp) {
+  const doc = await readReviewFile(videoName);
+  doc.ignored = stamp || null;
+  return persist(videoName, doc);
+}
+
 /** Just what a listing needs, without carrying the whole history around. */
 export async function reviewStatus(videoName) {
   const doc = await readReviewFile(videoName);
@@ -243,6 +259,7 @@ export async function reviewStatus(videoName) {
     secondReview: doc.secondReview,
     reviewCount: doc.reviews,
     changeCount: doc.changes.length,
+    ignored: doc.ignored,
   };
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ClipboardList, Plus, Minus, Move, Tag, CheckCircle2, Loader2, XCircle, Download } from 'lucide-react';
+import { ClipboardList, Plus, Minus, Move, Tag, CheckCircle2, Loader2, XCircle, Download, EyeOff, Eye } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { reviewDiff, tallyTotal } from '../lib/review';
 import { LABEL_META, labelTitle } from '../lib/labels';
@@ -89,8 +89,11 @@ export default function ReviewChanges() {
   const clip = useStore((s) => s.project?.video?.filename ?? null);
   const finishReview = useStore((s) => s.finishReview);
   const clearReviewed = useStore((s) => s.clearReviewed);
+  const ignored = useStore((s) => s.project?.meta?.ignored ?? null);
+  const setIgnored = useStore((s) => s.setIgnored);
   const [finishing, setFinishing] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [ignoring, setIgnoring] = useState(false);
 
   const d = useMemo(() => reviewDiff(baseline, events), [baseline, events]);
 
@@ -119,6 +122,34 @@ export default function ReviewChanges() {
       /* already reported */
     } finally {
       setClearing(false);
+    }
+  };
+
+  // Too poor to work on: ask why, with the usual reason already filled in.
+  const ignore = async () => {
+    const reason = window.prompt(
+      'Ignore this clip? It leaves the review lists and is listed under Ignored in the Library.\n\nWhy?',
+      'Poor video quality',
+    );
+    if (reason === null) return;
+    setIgnoring(true);
+    try {
+      await setIgnored(reason.trim() || 'Poor video quality');
+    } catch {
+      /* already reported */
+    } finally {
+      setIgnoring(false);
+    }
+  };
+
+  const unignore = async () => {
+    setIgnoring(true);
+    try {
+      await setIgnored(null);
+    } catch {
+      /* already reported */
+    } finally {
+      setIgnoring(false);
     }
   };
 
@@ -222,6 +253,42 @@ export default function ReviewChanges() {
               </a>
             )}
           </p>
+        )}
+      </div>
+
+      {/* Too poor to work on. Set aside rather than reviewed: it leaves the
+          review lists and is listed under Ignored, keeping its actions and
+          review marks for when it is taken back. */}
+      <div className="mt-3 border-t border-white/[0.06] pt-3">
+        {ignored ? (
+          <div className="rounded-lg border border-rose-500/30 bg-rose-500/[0.07] p-2.5">
+            <p className="flex items-center gap-1.5 text-2xs font-semibold text-rose-300">
+              <EyeOff size={12} className="shrink-0" /> Ignored: {ignored.reason || 'no reason given'}
+            </p>
+            <p className="mt-1 text-2xs leading-snug text-ink-500">
+              {ignored.at ? `Set aside ${relativeTime(ignored.at)}${ignored.by ? ` by ${ignored.by}` : ''}. ` : ''}
+              It is out of the review lists, and listed under Ignored in the Library.
+            </p>
+            <button
+              onClick={unignore}
+              disabled={ignoring || finishing || clearing}
+              title="Put this clip back in the review lists. Its actions and review marks are as they were."
+              className="mt-2 flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-2xs font-semibold text-ink-300 transition hover:border-white/25 hover:text-white disabled:opacity-50"
+            >
+              {ignoring ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+              Stop ignoring
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={ignore}
+            disabled={ignoring || finishing || clearing}
+            title="Poor video quality? Set this clip aside: it leaves the review lists and is listed under Ignored. Its actions and review marks are kept."
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-ink-400 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
+          >
+            {ignoring ? <Loader2 size={14} className="animate-spin" /> : <EyeOff size={14} />}
+            Ignore this clip
+          </button>
         )}
       </div>
     </div>

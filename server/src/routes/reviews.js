@@ -31,7 +31,7 @@ async function collect(onlyClip = null) {
   for (const [key, entry] of reviewFiles) {
     if (onlyClip && key !== onlyClip.toLowerCase()) continue;
     const doc = await readReviewFileAt(entry.path);
-    if (!doc || (!doc.changes.length && !doc.notes.length && !doc.firstReview)) continue;
+    if (!doc || (!doc.changes.length && !doc.notes.length && !doc.firstReview && !doc.ignored)) continue;
 
     let annotator = null;
     let actions = null;
@@ -56,6 +56,7 @@ async function collect(onlyClip = null) {
       actions,
       firstReview: doc.firstReview,
       secondReview: doc.secondReview,
+      ignored: doc.ignored ?? null,
       reviews: doc.reviews,
       summary: doc.summary ?? null,
       totals: doc.totals,
@@ -141,6 +142,7 @@ function toText(c) {
   const when = (r) => String(r?.at ?? '').slice(0, 16).replace('T', ' ');
   lines.push(c.firstReview ? `1st review: passed ${when(c.firstReview)}` : '1st review: not yet');
   lines.push(c.secondReview ? `2nd review: passed ${when(c.secondReview)}` : '2nd review: not yet');
+  if (c.ignored) lines.push(`Ignored: ${c.ignored.reason || 'no reason given'}, ${when(c.ignored)}${c.ignored.by ? ` by ${c.ignored.by}` : ''}`);
   lines.push('');
 
   if (!c.changes.length && !c.notes.length) {
@@ -156,7 +158,7 @@ function toText(c) {
 
 const INDEX_COLUMNS = [
   'clip', 'annotator', 'actions_now', 'reviews', 'changes_recorded',
-  'review_stage', 'first_review_at', 'second_review_at', 'log_file',
+  'review_stage', 'first_review_at', 'second_review_at', 'ignored', 'ignored_reason', 'ignored_at', 'log_file',
 ];
 
 function indexCsv(clips, names) {
@@ -169,6 +171,9 @@ function indexCsv(clips, names) {
     review_stage: c.secondReview ? 2 : c.firstReview ? 1 : 0,
     first_review_at: c.firstReview?.at ?? '',
     second_review_at: c.secondReview?.at ?? '',
+    ignored: c.ignored ? 'yes' : '',
+    ignored_reason: c.ignored?.reason ?? '',
+    ignored_at: c.ignored?.at ?? '',
     log_file: names[i],
   }));
   const head = INDEX_COLUMNS.join(',');

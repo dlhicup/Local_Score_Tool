@@ -304,6 +304,26 @@ export const useStore = create((set, get) => ({
   },
 
   /**
+   * Set the open clip aside as too poor to work on, saying why; null takes
+   * that back. Its actions and review marks are not touched, and unsaved
+   * edits on screen stay unsaved.
+   */
+  setIgnored: async (reason) => {
+    const { project } = get();
+    if (!project) return;
+    try {
+      const r = reason === null ? await api.unignoreClip(project.id) : await api.ignoreClip(project.id, reason);
+      set((s) => (s.project
+        ? { project: { ...s.project, meta: { ...s.project.meta, ignored: r.ignored ?? null } } }
+        : {}));
+      get().toast(r.ignored ? 'Ignored: it is out of the review lists now' : 'Back in the review lists', 'success');
+    } catch (err) {
+      get().toast(err.message, 'error');
+      throw err;
+    }
+  },
+
+  /**
    * Throw away this clip's ground truth entirely — the working record and the
    * delivered file. The clip itself is untouched and returns to the queue as
    * unannotated, so the work can simply be redone.
