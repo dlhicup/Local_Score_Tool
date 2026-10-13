@@ -216,7 +216,7 @@ export default function Settings() {
             />
           </Row>
 
-          <Row label="Seek step" hint="How far ← and → move the playhead. Hold shift for five times this.">
+          <Row label="Seek step" hint="How far Shift+← and Shift+→ jump. Plain ← and → always step one frame.">
             <Slider
               value={settings.seekStep}
               min={0.1}
@@ -224,6 +224,20 @@ export default function Settings() {
               step={0.1}
               onChange={(seekStep) => updateSettings({ seekStep })}
               format={(v) => `${v.toFixed(1)}s`}
+            />
+          </Row>
+
+          <Row
+            label="Hold-step speed"
+            hint="Frames per second while ← or → is held down. Every frame is still shown; this is only how long each one stays up."
+          >
+            <Slider
+              value={settings.holdStepFps}
+              min={2}
+              max={25}
+              step={1}
+              onChange={(holdStepFps) => updateSettings({ holdStepFps })}
+              format={(v) => `${v} fps`}
             />
           </Row>
 

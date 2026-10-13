@@ -17,6 +17,9 @@ const DEFAULT_SETTINGS = {
   // One frame at the 25 fps reporting clock.
   nudgeStep: 0.04,
   seekStep: 1,
+  // Frames per second while an arrow key is held. Slow enough to read each
+  // one; the decoder can go three times faster, which is too fast to.
+  holdStepFps: 10,
   pageSize: 50,
   autoAccept: true,
 };

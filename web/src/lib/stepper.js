@@ -24,9 +24,26 @@ import { REPORTING_FPS } from './fps';
  * truth is written on, so a step always lands exactly on a frame number.
  */
 
-/** Never faster than this between steps. OS repeat is about this rate, so
- *  holding a key feels the way it always did — it just shows every frame. */
-const MIN_INTERVAL_MS = 33;
+/**
+ * Pace while a key is held. OS key repeat is about thirty a second, and with
+ * hardware decode the stepper can match that — at which point the frames go
+ * by too fast to read. Ten a second is a frame every 100 ms, enough to see
+ * each one. Adjustable in Settings; never faster than the decoder can paint,
+ * whatever it is set to.
+ */
+let intervalMs = 100;
+
+/**
+ * How long a key has to stay down before it starts repeating, so a slightly
+ * long tap is still one frame. The OS uses roughly this before its own repeat.
+ */
+const INITIAL_DELAY_MS = 300;
+
+/** Frames per second while a key is held. */
+export function setStepRate(fps) {
+  const f = Number(fps);
+  intervalMs = Number.isFinite(f) && f > 0 ? Math.max(1000 / 60, 1000 / f) : 100;
+}
 
 /** A seek that has produced neither a frame nor `seeked` by then is treated as
  *  done, so a decoder stall cannot wedge the stepper with the key held. */
@@ -96,14 +113,19 @@ async function stepOnce(dir, frames) {
 async function run() {
   running = true;
   let lastAt = 0;
+  let steps = 0;
   try {
     while (held) {
+      // The first step is immediate. The second waits the hold delay, so a
+      // tap that lingers is still one frame. After that, the chosen pace.
+      const gap = steps === 0 ? 0 : steps === 1 ? INITIAL_DELAY_MS : intervalMs;
       const since = performance.now() - lastAt;
-      if (since < MIN_INTERVAL_MS) await sleep(MIN_INTERVAL_MS - since);
+      if (since < gap) await sleep(gap - since);
       if (!held) break;
       lastAt = performance.now();
       const { dir, frames } = held;
       const moved = await stepOnce(dir, frames);
+      steps += 1;
       if (!moved) break; // the start or the end of the clip
     }
   } finally {

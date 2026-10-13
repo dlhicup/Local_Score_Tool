@@ -16,7 +16,7 @@ import { useStore } from '../store/useStore';
 import { useHotkeys } from '../lib/useHotkeys';
 import { labelTitle, UNSURE_KEY } from '../lib/labels';
 import { frameStep, DEFAULT_FPS, REPORTING_FPS } from '../lib/fps';
-import { startStepping, stopStepping, setStepListener } from '../lib/stepper';
+import { startStepping, stopStepping, setStepListener, setStepRate } from '../lib/stepper';
 
 const NEAR = 0.6; // seconds either side of the playhead counted as "now"
 
@@ -92,6 +92,11 @@ export default function Review({ mode = 'annotate' }) {
       document.removeEventListener('visibilitychange', onHide);
     };
   }, []);
+
+  // The pace a held arrow steps at is a preference, so it follows Settings.
+  useEffect(() => {
+    setStepRate(settings.holdStepFps);
+  }, [settings.holdStepFps]);
 
   const [showKeys, setShowKeys] = useState(false);
   // The key reference beside the picture. Remembered per browser: an annotator
