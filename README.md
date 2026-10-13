@@ -211,7 +211,9 @@ asks first — OK saves them and moves on, Cancel stays.
 
 Every row in the Library has two buttons. **Annotate** opens the clip to label
 it. **Review** opens the same workspace to correct a clip that has already been
-labeled — it is disabled until there is something to correct.
+labeled — it is disabled until there is something to correct. Clicking the row
+itself does what **Review** does when the clip has actions, and what
+**Annotate** does when it has none.
 
 The difference is that a review is recorded. While you work, a panel beside the
 picture counts what you have changed: actions added, actions removed, surviving

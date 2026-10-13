@@ -175,6 +175,10 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
   // How many reviews this clip has been through. Drives whether there is a
   // log to download for it at all.
   const reviewCount = p?.reviewCount ?? 0;
+  // Clicking the row opens a clip that already has actions for review, so
+  // whatever gets corrected is recorded; one with none opens to annotate.
+  // The two buttons on the right still choose either way.
+  const rowMode = p ? 'review' : 'annotate';
 
   const mix = p?.byType
     ? EVENT_LABELS.map((l) => ({ l, n: p.byType[l] ?? 0 })).filter((x) => x.n > 0)
@@ -188,9 +192,10 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
       animate={{ opacity: 1 }}
       role="button"
       tabIndex={0}
-      onClick={() => onOpen(v, 'annotate')}
+      title={p ? 'Open for review' : 'Open to annotate'}
+      onClick={() => onOpen(v, rowMode)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(v, 'annotate'); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(v, rowMode); }
       }}
       className={`group grid w-full cursor-pointer ${GRID} items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]`}
     >
@@ -522,8 +527,8 @@ export default function Library() {
 
   /**
    * `review` opens the same workspace with a record kept of what gets changed;
-   * `annotate` opens it with none. Clicking the row itself annotates, which is
-   * what it has always done.
+   * `annotate` opens it with none. Clicking the row itself reviews a clip that
+   * already has actions and annotates one that has none.
    */
   const open = async (v, mode = 'annotate') => {
     // Previous and Next in the workspace walk exactly this list.
