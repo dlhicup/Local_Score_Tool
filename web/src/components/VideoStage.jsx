@@ -7,8 +7,9 @@ import {
 import { useStore } from '../store/useStore';
 import { timecode, seconds2 } from '../lib/format';
 import { LABEL_META, labelTitle } from '../lib/labels';
-import { toFrame, frameStep, REPORTING_FPS } from '../lib/fps';
+import { toFrame, REPORTING_FPS } from '../lib/fps';
 import { setVideoEl, seekVideo } from '../lib/videoRef';
+import { stepFrames } from '../lib/stepper';
 
 const RATES = [0.25, 0.5, 1, 1.5, 2];
 
@@ -28,7 +29,6 @@ export default function VideoStage({ nearbyEvents = [] }) {
   const setRate = useStore((s) => s.setPlaybackRate);
   // Stepping moves one frame on the reporting clock — the same unit the
   // exported frame numbers use.
-  const FRAME = frameStep(REPORTING_FPS);
 
   const ref = useRef(null);
   const wrapRef = useRef(null);
@@ -132,25 +132,9 @@ export default function VideoStage({ nearbyEvents = [] }) {
     if (ref.current) ref.current.playbackRate = rate;
   }, [rate]);
 
-  const step = useCallback(
-    (frames) => {
-      const v = ref.current;
-      if (!v) return;
-      setPlaying(false);
-      const t = Math.max(0, Math.min(v.duration || 0, v.currentTime + frames * FRAME));
-      v.currentTime = t;
-      setCurrentTime(t);
-    },
-    [setPlaying, setCurrentTime],
-  );
-
-  const jump = (secs) => {
-    const v = ref.current;
-    if (!v) return;
-    const t = Math.max(0, Math.min(v.duration || 0, v.currentTime + secs));
-    v.currentTime = t;
-    setCurrentTime(t);
-  };
+  // The transport buttons step through the same stepper the keyboard uses,
+  // so a click lands on the reporting grid and waits its turn behind a seek
+  // already in flight rather than abandoning it.
 
   if (!videoUrl) {
     return (
@@ -300,16 +284,16 @@ export default function VideoStage({ nearbyEvents = [] }) {
             {playing ? <Pause size={17} /> : <Play size={17} />}
           </button>
 
-          <button onClick={() => jump(-5)} title="Back 5s" className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white">
+          <button onClick={() => stepFrames(-1, 5 * REPORTING_FPS)} title="Back 5s" className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white">
             <SkipBack size={15} />
           </button>
-          <button onClick={() => step(-1)} title="Previous frame (,)" className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white">
+          <button onClick={() => stepFrames(-1)} title="Previous frame (,)" className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white">
             <ChevronLeft size={15} />
           </button>
-          <button onClick={() => step(1)} title="Next frame (.)" className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white">
+          <button onClick={() => stepFrames(1)} title="Next frame (.)" className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white">
             <ChevronRight size={15} />
           </button>
-          <button onClick={() => jump(5)} title="Forward 5s" className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white">
+          <button onClick={() => stepFrames(1, 5 * REPORTING_FPS)} title="Forward 5s" className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white">
             <SkipForward size={15} />
           </button>
 

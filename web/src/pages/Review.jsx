@@ -16,7 +16,7 @@ import { useStore } from '../store/useStore';
 import { useHotkeys } from '../lib/useHotkeys';
 import { labelTitle, UNSURE_KEY } from '../lib/labels';
 import { frameStep, DEFAULT_FPS, REPORTING_FPS } from '../lib/fps';
-import { getVideoEl } from '../lib/videoRef';
+import { startStepping, stopStepping, setStepListener } from '../lib/stepper';
 
 const NEAR = 0.6; // seconds either side of the playhead counted as "now"
 
@@ -63,21 +63,35 @@ export default function Review({ mode = 'annotate' }) {
   const step = settings.nudgeStep || frameStep(DEFAULT_FPS);
   const seekStep = settings.seekStep || 1;
 
-  // Move the playhead by whole frames on the 25 fps reporting clock, snapping
-  // to the frame grid so precise annotation always sits exactly on a frame.
-  const stepFrame = useCallback(
-    (frames) => {
-      // Read the live element, not the store: frame stepping must be relative
-      // to where the video actually is, and it must always land paused.
-      const el = getVideoEl();
-      const now = el ? el.currentTime : currentTime;
-      if (el && !el.paused) el.pause();
-      if (playing) setPlaying(false);
-      const f = Math.max(0, Math.round(now * REPORTING_FPS) + frames);
-      seek(f / REPORTING_FPS);
-    },
-    [currentTime, playing, setPlaying, seek],
-  );
+  /**
+   * Frame stepping is driven by the stepper, not by the keyboard. A held arrow
+   * starts it on key-down and stops it on key-up; in between it shows one
+   * frame, waits for that frame to be painted, and only then moves to the
+   * next. Losing focus or hiding the tab has to stop it too: the key-up for a
+   * key released in another window never arrives, and a stepper nobody is
+   * holding would walk to the end of the clip.
+   */
+  useEffect(() => {
+    setStepListener((t) => {
+      const s = useStore.getState();
+      s.setCurrentTime(t);
+      if (s.playing) s.setPlaying(false);
+    });
+    const STEP_KEYS = new Set(['ArrowLeft', 'ArrowRight', ',', '.']);
+    const onUp = (e) => { if (STEP_KEYS.has(e.key)) stopStepping(e.key); };
+    const onBlur = () => stopStepping();
+    const onHide = () => { if (document.hidden) stopStepping(); };
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      stopStepping();
+      setStepListener(null);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, []);
 
   const [showKeys, setShowKeys] = useState(false);
   // The key reference beside the picture. Remembered per browser: an annotator
@@ -177,25 +191,27 @@ export default function Review({ mode = 'annotate' }) {
           e.preventDefault();
           return setPlaying(!playing);
         case 'ArrowLeft':
-          e.preventDefault();
-          // Plain: one frame back, for frame-accurate marking. Shift: one
-          // second, for covering ground quickly.
-          return e.shiftKey ? seek(currentTime - seekStep) : stepFrame(-1);
         case 'ArrowRight':
+        case ',':
+        case '.': {
           e.preventDefault();
-          return e.shiftKey ? seek(currentTime + seekStep) : stepFrame(1);
+          // OS autorepeat is ignored on purpose: each repeat used to issue a
+          // fresh seek that abandoned the one before it, so a held key showed
+          // nothing until it was released. The stepper paces itself by frames
+          // actually shown instead, and runs until the key comes up.
+          if (e.repeat) return;
+          const dir = e.key === 'ArrowLeft' || e.key === ',' ? -1 : 1;
+          // Plain: one frame, for frame-accurate marking. Shift+arrow: one
+          // second at a time, for covering ground quickly.
+          const frames = e.shiftKey && e.key.startsWith('Arrow') ? Math.round(seekStep * REPORTING_FPS) : 1;
+          return startStepping(e.key, dir, { frames });
+        }
         case 'ArrowUp':
           e.preventDefault();
           return stepSelection(-1);
         case 'ArrowDown':
           e.preventDefault();
           return stepSelection(1);
-        case ',':
-          e.preventDefault();
-          return stepFrame(-1);
-        case '.':
-          e.preventDefault();
-          return stepFrame(1);
         case 'Delete':
         case 'Backspace':
           // Removes a shift-dragged span if there is one, else the one event.
@@ -243,7 +259,7 @@ export default function Review({ mode = 'annotate' }) {
         return;
       }
     },
-    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, stepFrame, dirty, saveProject, setTag],
+    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, dirty, saveProject, setTag],
   );
 
   // Saving already writes groundtruth/<clip>.json, so the only header action

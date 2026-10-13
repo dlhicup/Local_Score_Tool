@@ -309,7 +309,7 @@ in a browser tab instead of saving it.
 | key | action |
 | --- | --- |
 | `Space` | play / pause |
-| `←` `→` | step one frame |
+| `←` `→` | step one frame; hold to keep stepping, one painted frame at a time, until you let go |
 | `⇧` + `←` `→` | jump one second |
 | `1`–`5` | playback speed |
 | `↑` `↓` | previous / next action |
