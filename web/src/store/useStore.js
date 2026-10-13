@@ -20,7 +20,9 @@ const DEFAULT_SETTINGS = {
   seekStep: 1,
   // Frames one press of ← or → moves: enough to get through a play quickly.
   // , and . always move exactly one, for landing a mark on its frame.
-  arrowStep: 4,
+  arrowStep: 2,
+  // Set once a stored arrow step has been read past the change of default.
+  arrowStepChecked: true,
   // Steps a second while a stepping key is held. Slow enough to read each
   // picture; the decoder can go three times faster, which is too fast to.
   holdStepFps: 10,
@@ -38,7 +40,16 @@ function loadSettings() {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(migrated));
       return migrated;
     }
-    return { ...DEFAULT_SETTINGS, ...stored };
+    const merged = { ...DEFAULT_SETTINGS, ...stored };
+    // The arrow step's default went from 4 frames to 2. A 4 saved before then
+    // is the old default riding along with some other setting, not a choice,
+    // so it becomes 2, once. A 4 picked in Settings afterwards is kept.
+    if (!stored.arrowStepChecked) {
+      if (stored.arrowStep === 4) merged.arrowStep = DEFAULT_SETTINGS.arrowStep;
+      merged.arrowStepChecked = true;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+    }
+    return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
