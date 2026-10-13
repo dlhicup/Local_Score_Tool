@@ -12,7 +12,7 @@ import ReviewChanges from '../components/ReviewChanges';
 import Shortcuts from '../components/Shortcuts';
 import ActionMenu from '../components/ActionMenu';
 import ConfirmDelete from '../components/ConfirmDelete';
-import { useStore } from '../store/useStore';
+import { useStore, arrowStepOf } from '../store/useStore';
 import { useHotkeys } from '../lib/useHotkeys';
 import { labelTitle, UNSURE_KEY } from '../lib/labels';
 import { frameStep, DEFAULT_FPS, REPORTING_FPS } from '../lib/fps';
@@ -63,6 +63,7 @@ export default function Review({ mode = 'annotate' }) {
 
   const step = settings.nudgeStep || frameStep(DEFAULT_FPS);
   const seekStep = settings.seekStep || 1;
+  const arrowStep = arrowStepOf(settings);
 
   /**
    * Frame stepping is driven by the stepper, not by the keyboard. A held arrow
@@ -214,9 +215,12 @@ export default function Review({ mode = 'annotate' }) {
           // actually shown instead, and runs until the key comes up.
           if (e.repeat) return;
           const dir = e.key === 'ArrowLeft' || e.key === ',' ? -1 : 1;
-          // Plain: one frame, for frame-accurate marking. Shift+arrow: one
-          // second at a time, for covering ground quickly.
-          const frames = e.shiftKey && e.key.startsWith('Arrow') ? Math.round(seekStep * REPORTING_FPS) : 1;
+          // , and . move exactly one frame, for landing a mark on its frame.
+          // A plain arrow moves the arrow step (4 frames unless Settings says
+          // otherwise), for getting through a play; Shift+arrow a second at a
+          // time, for covering ground.
+          const arrow = e.key.startsWith('Arrow');
+          const frames = !arrow ? 1 : e.shiftKey ? Math.round(seekStep * REPORTING_FPS) : arrowStep;
           return startStepping(e.key, dir, { frames });
         }
         case 'ArrowUp':
@@ -272,7 +276,7 @@ export default function Review({ mode = 'annotate' }) {
         return;
       }
     },
-    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, dirty, saveProject, setTag],
+    [currentTime, playing, selectedId, selectedIds, events, stepSelection, step, seekStep, arrowStep, dirty, saveProject, setTag],
   );
 
   // Saving already writes groundtruth/<clip>.json, so the only header action

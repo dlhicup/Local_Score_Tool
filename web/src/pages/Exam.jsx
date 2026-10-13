@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GraduationCap, AlertTriangle, ChevronDown, Play, Pause, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, FolderOpen } from 'lucide-react';
 import { api } from '../lib/api';
-import { useStore } from '../store/useStore';
+import { useStore, arrowStepOf } from '../store/useStore';
 import { LABEL_META, labelTitle } from '../lib/labels';
 import { timecode } from '../lib/format';
 import { REPORTING_FPS, toFrame } from '../lib/fps';
@@ -18,6 +18,7 @@ import ReadOnlyTimeline from '../components/ReadOnlyTimeline';
  */
 export default function Exam() {
   const toast = useStore((s) => s.toast);
+  const arrowStep = useStore((s) => arrowStepOf(s.settings));
   const [list, setList] = useState(null);
   const [sel, setSel] = useState(null);
   const [entry, setEntry] = useState(null);
@@ -138,8 +139,8 @@ export default function Exam() {
 
   /**
    * Keyboard, mirroring the workspace but with nothing that can change a label:
-   * Space plays, ←/→ step one frame (Shift = one second), ↑/↓ jump between
-   * actions, +/−/0 zoom.
+   * Space plays, ←/→ move the workspace's arrow step (Shift = one second),
+   * , and . exactly one frame, ↑/↓ jump between actions, +/−/0 zoom.
    */
   useEffect(() => {
     const onKey = (e) => {
@@ -152,9 +153,9 @@ export default function Exam() {
           if (t && t.tagName === 'BUTTON') return; // let a focused button take Space
           e.preventDefault(); return toggle();
         case 'ArrowLeft':
-          e.preventDefault(); return e.shiftKey ? seek(at() - 1) : step(-1);
+          e.preventDefault(); return e.shiftKey ? seek(at() - 1) : step(-arrowStep);
         case 'ArrowRight':
-          e.preventDefault(); return e.shiftKey ? seek(at() + 1) : step(1);
+          e.preventDefault(); return e.shiftKey ? seek(at() + 1) : step(arrowStep);
         case 'ArrowUp':
           e.preventDefault(); return gotoAction(-1);
         case 'ArrowDown':
@@ -180,7 +181,7 @@ export default function Exam() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [toggle, seek, step, gotoAction, zoomBy, resetZoom]);
+  }, [toggle, seek, step, arrowStep, gotoAction, zoomBy, resetZoom]);
 
   const rows = entry?.rows ?? [];
   rowsRef.current = rows;
@@ -322,8 +323,8 @@ export default function Exam() {
                       <button onClick={toggle} title="Play / pause (Space)" className="rounded-lg p-2 text-white transition hover:bg-white/10">
                         {playing ? <Pause size={17} /> : <Play size={17} />}
                       </button>
-                      <button onClick={() => step(-1)} title="Back one frame (← · Shift+← one second)" className="rounded-lg p-2 text-white transition hover:bg-white/10"><ChevronLeft size={17} /></button>
-                      <button onClick={() => step(1)} title="Forward one frame (→ · Shift+→ one second)" className="rounded-lg p-2 text-white transition hover:bg-white/10"><ChevronRight size={17} /></button>
+                      <button onClick={() => step(-1)} title="Back one frame (,) · Shift+← one second" className="rounded-lg p-2 text-white transition hover:bg-white/10"><ChevronLeft size={17} /></button>
+                      <button onClick={() => step(1)} title="Forward one frame (.) · Shift+→ one second" className="rounded-lg p-2 text-white transition hover:bg-white/10"><ChevronRight size={17} /></button>
                       <span className="ml-2 font-mono text-xs text-white tabular">{timecode(now)}</span>
                       <span className="font-mono text-xs text-ink-400 tabular">/ {timecode(duration, { ms: false })}</span>
                       <span

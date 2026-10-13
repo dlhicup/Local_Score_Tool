@@ -18,8 +18,11 @@ const DEFAULT_SETTINGS = {
   // One frame at the 25 fps reporting clock.
   nudgeStep: 0.04,
   seekStep: 1,
-  // Frames per second while an arrow key is held. Slow enough to read each
-  // one; the decoder can go three times faster, which is too fast to.
+  // Frames one press of ← or → moves: enough to get through a play quickly.
+  // , and . always move exactly one, for landing a mark on its frame.
+  arrowStep: 4,
+  // Steps a second while a stepping key is held. Slow enough to read each
+  // picture; the decoder can go three times faster, which is too fast to.
   holdStepFps: 10,
   pageSize: 50,
   autoAccept: true,
@@ -664,3 +667,7 @@ export const useStore = create((set, get) => ({
 }));
 
 export { DEFAULT_SETTINGS, uid };
+
+/** Frames one press of ← or → moves, whatever the stored setting holds. */
+export const arrowStepOf = (settings) =>
+  Math.max(1, Math.round(Number(settings?.arrowStep) || DEFAULT_SETTINGS.arrowStep));

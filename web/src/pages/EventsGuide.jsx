@@ -129,7 +129,7 @@ export default function EventsGuide() {
         <div className="mt-4 rounded-xl border border-white/[0.06] bg-ink-800/60 p-5">
           <h2 className="mb-2 text-sm font-semibold text-white">Marking well</h2>
           <ul className="space-y-1.5 text-sm text-ink-400">
-            <li>• Put the mark on the frame the action <em>occurs</em>, not when you notice it — step frame by frame with <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">←</kbd> <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">→</kbd> to land it exactly.</li>
+            <li>• Put the mark on the frame the action <em>occurs</em>, not when you notice it — step frame by frame with <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">,</kbd> <kbd className="rounded border border-white/10 bg-ink-700 px-1.5 py-0.5 font-mono text-2xs">.</kbd> to land it exactly.</li>
             <li>• A <b>pass</b> and the <b>pass received</b> that follows are two separate events.</li>
             <li>• Only use these 15 — if something doesn't fit, it isn't labeled.</li>
             <li>• Drag a marker to retime it; select and delete to remove a mistake.</li>

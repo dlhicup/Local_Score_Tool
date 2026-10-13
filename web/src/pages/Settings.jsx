@@ -216,7 +216,21 @@ export default function Settings() {
             />
           </Row>
 
-          <Row label="Seek step" hint="How far Shift+← and Shift+→ jump. Plain ← and → always step one frame.">
+          <Row
+            label="Arrow step"
+            hint="How many frames one press of ← or → moves. , and . always move exactly one, for landing a mark on its frame."
+          >
+            <Slider
+              value={settings.arrowStep}
+              min={1}
+              max={12}
+              step={1}
+              onChange={(arrowStep) => updateSettings({ arrowStep })}
+              format={(v) => `${v} frame${v === 1 ? '' : 's'}`}
+            />
+          </Row>
+
+          <Row label="Seek step" hint="How far Shift+← and Shift+→ jump.">
             <Slider
               value={settings.seekStep}
               min={0.1}
@@ -229,7 +243,7 @@ export default function Settings() {
 
           <Row
             label="Hold-step speed"
-            hint="Frames per second while ← or → is held down. Every frame is still shown; this is only how long each one stays up."
+            hint="Steps a second while ← →, or , . is held down. Every step is still shown; this is only how long each picture stays up."
           >
             <Slider
               value={settings.holdStepFps}
@@ -237,7 +251,7 @@ export default function Settings() {
               max={25}
               step={1}
               onChange={(holdStepFps) => updateSettings({ holdStepFps })}
-              format={(v) => `${v} fps`}
+              format={(v) => `${v}/s`}
             />
           </Row>
 

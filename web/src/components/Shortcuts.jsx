@@ -1,15 +1,18 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Keyboard } from 'lucide-react';
 import { EVENT_LABELS, LABEL_META, labelTitle } from '../lib/labels';
+import { useStore, arrowStepOf } from '../store/useStore';
+
+const frames = (n) => `${n} frame${n === 1 ? '' : 's'}`;
 
 const GROUPS = [
   {
     title: 'Playback',
     items: [
       ['Space', 'Play / pause'],
-      ['← →', 'Step one frame back / forward'],
+      ['← →', (s) => `Step ${frames(arrowStepOf(s))} back / forward · set in Settings`],
       ['⇧ ← →', 'Jump one second back / forward'],
-      [', .', 'Step one frame (same as ← →)'],
+      [', .', 'Step exactly one frame, to land a mark'],
       ['1–5', 'Playback speed'],
     ],
   },
@@ -34,6 +37,7 @@ const GROUPS = [
 ];
 
 export default function Shortcuts({ open, onClose }) {
+  const settings = useStore((s) => s.settings);
   return (
     <AnimatePresence>
       {open && (
@@ -68,7 +72,7 @@ export default function Shortcuts({ open, onClose }) {
                     {g.items.map(([k, d]) => (
                       <div key={k} className="flex items-center gap-3">
                         <span className="kbd shrink-0">{k}</span>
-                        <span className="text-xs text-ink-300">{d}</span>
+                        <span className="text-xs text-ink-300">{typeof d === 'function' ? d(settings) : d}</span>
                       </div>
                     ))}
                   </div>

@@ -2,8 +2,9 @@ import { getVideoEl } from './videoRef';
 import { REPORTING_FPS } from './fps';
 
 /**
- * Hold-to-step: move the picture one frame at a time, as fast as frames can
- * actually be shown, for as long as a key is held.
+ * Hold-to-step: move the picture a step at a time (one frame for , and .,
+ * the arrow step for ← and →), as fast as frames can actually be shown, for
+ * as long as a key is held.
  *
  * The keyboard used to drive the seeks directly. OS key repeat fires about
  * thirty keydowns a second whatever the decoder is doing, and setting
@@ -27,7 +28,7 @@ import { REPORTING_FPS } from './fps';
 /**
  * Pace while a key is held. OS key repeat is about thirty a second, and with
  * hardware decode the stepper can match that — at which point the frames go
- * by too fast to read. Ten a second is a frame every 100 ms, enough to see
+ * by too fast to read. Ten a second is a picture every 100 ms, enough to see
  * each one. Adjustable in Settings; never faster than the decoder can paint,
  * whatever it is set to.
  */
@@ -35,11 +36,11 @@ let intervalMs = 100;
 
 /**
  * How long a key has to stay down before it starts repeating, so a slightly
- * long tap is still one frame. The OS uses roughly this before its own repeat.
+ * long tap is still one step. The OS uses roughly this before its own repeat.
  */
 const INITIAL_DELAY_MS = 300;
 
-/** Frames per second while a key is held. */
+/** Steps per second while a key is held. */
 export function setStepRate(fps) {
   const f = Number(fps);
   intervalMs = Number.isFinite(f) && f > 0 ? Math.max(1000 / 60, 1000 / f) : 100;
@@ -117,7 +118,7 @@ async function run() {
   try {
     while (held) {
       // The first step is immediate. The second waits the hold delay, so a
-      // tap that lingers is still one frame. After that, the chosen pace.
+      // tap that lingers is still one step. After that, the chosen pace.
       const gap = steps === 0 ? 0 : steps === 1 ? INITIAL_DELAY_MS : intervalMs;
       const since = performance.now() - lastAt;
       if (since < gap) await sleep(gap - since);
