@@ -154,12 +154,7 @@ export const useStore = create((set, get) => ({
    * review takes the baseline from what is on screen; leaving it drops it, so
    * ordinary annotating never records anything.
    */
-  setReviewing: (v) =>
-    set((s) =>
-      s.reviewing === Boolean(v)
-        ? {}
-        : { reviewing: Boolean(v), reviewBaseline: v ? s.events : [] },
-    ),
+  setReviewing: (v) => set((s) => ({ reviewing: Boolean(v), reviewBaseline: v ? s.events : [] })),
 
   openProject: async (id, { reviewing = false } = {}) => {
     set({ loadingProject: true });
@@ -219,16 +214,19 @@ export const useStore = create((set, get) => ({
       const res = await api.saveProject(
         project.id,
         { ...project, events },
-        diff && diff.touched
-          ? {
-            added: diff.added,
-            removed: diff.removed,
-            retimed: diff.retimed,
-            retagged: diff.retagged,
-            changes: diff.changes,
-          }
-          : null,
-        finish,
+        {
+          review: diff && diff.touched
+            ? {
+              added: diff.added,
+              removed: diff.removed,
+              retimed: diff.retimed,
+              retagged: diff.retagged,
+              changes: diff.changes,
+            }
+            : null,
+          finishReview: finish,
+          reviewing,
+        },
       );
       const stored = res.project;
       const written = sortEvents(stored.events);
@@ -251,8 +249,8 @@ export const useStore = create((set, get) => ({
               res.review.retagged ? `${res.review.retagged} retagged` : null,
             ].filter(Boolean).join(' · ')
           : '';
-        const head = finish && res.reviewed
-          ? `Review finished — ${f ? f.count : written.length} actions signed off`
+        const head = finish && res.signedStage
+          ? `${res.signedStage === 1 ? '1st' : '2nd'} review passed — ${f ? f.count : written.length} actions signed off`
           : f
             ? `Saved ${f.count} actions to ${f.path.split(/[\\/]/).pop()}`
             : 'Ground truth saved';
@@ -269,18 +267,31 @@ export const useStore = create((set, get) => ({
   finishReview: () => get().saveProject({ finish: true }),
 
   /**
-   * Take the reviewed mark off this clip.
+   * Take a review mark off this clip: `stage` 2 the second, 1 the first and
+   * the second with it; omitted, the highest it has.
    *
-   * Only the mark changes: the events in the store are left exactly as they
+   * Only the marks change: the events in the store are left exactly as they
    * are, so unsaved edits survive, and nothing of them is written to the file.
    */
-  clearReviewed: async () => {
+  clearReviewed: async (stage = null) => {
     const { project } = get();
     if (!project) return;
     try {
-      await api.clearReviewed(project.id);
-      set((s) => (s.project ? { project: { ...s.project, meta: { ...s.project.meta, reviewed: null } } } : {}));
-      get().toast('Reviewed mark removed', 'success');
+      const r = await api.clearReviewed(project.id, stage);
+      set((s) => (s.project
+        ? {
+          project: {
+            ...s.project,
+            meta: {
+              ...s.project.meta,
+              reviewLevel: r.reviewLevel ?? 0,
+              firstReview: r.firstReview ?? null,
+              secondReview: r.secondReview ?? null,
+            },
+          },
+        }
+        : {}));
+      get().toast(r.reviewLevel === 1 ? '2nd review mark removed' : 'Review marks removed', 'success');
     } catch (err) {
       get().toast(err.message, 'error');
       throw err;

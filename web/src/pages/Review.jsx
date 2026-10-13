@@ -137,10 +137,17 @@ export default function Review({ mode = 'annotate' }) {
    * Switching between annotating and reviewing the same clip does not reload
    * it — the clip is already open, so only the mode changes, and with it the
    * baseline the review is measured against.
+   *
+   * Keyed on the clip id, not the project object. The object is replaced on
+   * every save and when a mark is taken off, and re-taking the baseline then
+   * would quietly fold unsaved edits into it. Moving to another clip with
+   * Next has to re-take it, though — the flag stays "reviewing", and without
+   * the id in the key the new clip would be measured against the last one.
    */
+  const openId = project?.id ?? null;
   useEffect(() => {
-    if (project && project.id === id) setReviewing(reviewing);
-  }, [id, project, reviewing, setReviewing]);
+    if (openId && openId === id) setReviewing(reviewing);
+  }, [id, openId, reviewing, setReviewing]);
 
   const duration = project?.video?.duration ?? 0;
 

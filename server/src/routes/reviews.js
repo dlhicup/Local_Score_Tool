@@ -31,7 +31,7 @@ async function collect(onlyClip = null) {
   for (const [key, entry] of reviewFiles) {
     if (onlyClip && key !== onlyClip.toLowerCase()) continue;
     const doc = await readReviewFileAt(entry.path);
-    if (!doc || (!doc.changes.length && !doc.notes.length && !doc.signedOff)) continue;
+    if (!doc || (!doc.changes.length && !doc.notes.length && !doc.firstReview)) continue;
 
     let annotator = null;
     let actions = null;
@@ -54,7 +54,8 @@ async function collect(onlyClip = null) {
       groundTruthFile: gt ? gt.rel : null,
       annotator,
       actions,
-      signedOff: doc.signedOff,
+      firstReview: doc.firstReview,
+      secondReview: doc.secondReview,
       reviews: doc.reviews,
       summary: doc.summary ?? null,
       totals: doc.totals,
@@ -78,7 +79,7 @@ const esc = (v) => {
 const COLUMNS = [
   'clip', 'change', 'kind', 'action', 'frame', 'time',
   'was_action', 'from_frame', 'from_time', 'tags', 'recorded_at',
-  'annotator', 'signed_off_by', 'signed_off_at', 'actions_now', 'log_file',
+  'annotator', 'first_review_by', 'first_review_at', 'second_review_by', 'second_review_at', 'actions_now', 'log_file',
 ];
 
 function toRows(clips) {
@@ -87,8 +88,10 @@ function toRows(clips) {
     const base = {
       clip: c.clip,
       annotator: c.annotator,
-      signed_off_by: c.signedOff?.by ?? '',
-      signed_off_at: c.signedOff?.at ?? '',
+      first_review_by: c.firstReview?.by ?? '',
+      first_review_at: c.firstReview?.at ?? '',
+      second_review_by: c.secondReview?.by ?? '',
+      second_review_at: c.secondReview?.at ?? '',
       actions_now: c.actions,
       log_file: c.logFile,
     };
@@ -111,7 +114,7 @@ function toRows(clips) {
     // silently short.
     for (const n of c.notes) rows.push({ ...base, change: n, kind: 'note' });
     if (!c.changes.length && !c.notes.length) {
-      rows.push({ ...base, change: 'Signed off with no review on record.', kind: 'note' });
+      rows.push({ ...base, change: 'Passed review with no changes on record.', kind: 'note' });
     }
   }
   return rows;
@@ -135,11 +138,9 @@ function toText(c) {
   if (c.annotator) lines.push(`Annotated by ${c.annotator}`);
   if (c.actions !== null) lines.push(`${c.actions} actions in the ground truth now`);
   if (c.summary) lines.push(c.summary);
-  if (c.signedOff) {
-    lines.push(`Signed off on ${String(c.signedOff.at ?? '').slice(0, 16).replace('T', ' ')}`);
-  } else {
-    lines.push('Not signed off');
-  }
+  const when = (r) => String(r?.at ?? '').slice(0, 16).replace('T', ' ');
+  lines.push(c.firstReview ? `1st review: passed ${when(c.firstReview)}` : '1st review: not yet');
+  lines.push(c.secondReview ? `2nd review: passed ${when(c.secondReview)}` : '2nd review: not yet');
   lines.push('');
 
   if (!c.changes.length && !c.notes.length) {
@@ -155,7 +156,7 @@ function toText(c) {
 
 const INDEX_COLUMNS = [
   'clip', 'annotator', 'actions_now', 'reviews', 'changes_recorded',
-  'signed_off_by', 'signed_off_at', 'log_file',
+  'review_stage', 'first_review_at', 'second_review_at', 'log_file',
 ];
 
 function indexCsv(clips, names) {
@@ -165,8 +166,9 @@ function indexCsv(clips, names) {
     actions_now: c.actions,
     reviews: c.reviews,
     changes_recorded: c.changes.length,
-    signed_off_by: c.signedOff?.by ?? '',
-    signed_off_at: c.signedOff?.at ?? '',
+    review_stage: c.secondReview ? 2 : c.firstReview ? 1 : 0,
+    first_review_at: c.firstReview?.at ?? '',
+    second_review_at: c.secondReview?.at ?? '',
     log_file: names[i],
   }));
   const head = INDEX_COLUMNS.join(',');
@@ -244,7 +246,8 @@ router.get('/reviews', requireAuth, async (req, res, next) => {
         clips: clips.length,
         reviews: clips.reduce((n, c) => n + c.reviews, 0),
         changes: clips.reduce((n, c) => n + c.changes.length, 0),
-        signedOff: clips.filter((c) => c.signedOff).length,
+        firstReviewed: clips.filter((c) => c.firstReview).length,
+        secondReviewed: clips.filter((c) => c.secondReview).length,
       },
     }, null, 2));
   } catch (err) {
@@ -260,7 +263,8 @@ router.get('/reviews/summary', requireAuth, async (_req, res, next) => {
       clips: clips.length,
       reviews: clips.reduce((n, c) => n + c.reviews, 0),
       changes: clips.reduce((n, c) => n + c.changes.length, 0),
-      signedOff: clips.filter((c) => c.signedOff).length,
+      firstReviewed: clips.filter((c) => c.firstReview).length,
+      secondReviewed: clips.filter((c) => c.secondReview).length,
     });
   } catch (err) {
     next(err);

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { LayoutGrid, ClipboardCheck, Settings2, Save, Users2, Undo2, Redo2, Trash2, BookOpen, GraduationCap } from 'lucide-react';
 import Logo from './Logo';
 import TagStatus from './TagStatus';
+import ClipNav from './ClipNav';
 import { useStore } from '../store/useStore';
 import { isManager } from '../lib/roles';
 
@@ -98,6 +99,7 @@ export default function AppShell({ children }) {
                     Reviewing
                   </span>
                 )}
+                <ClipNav />
               </div>
 
               <div className="flex-1" />

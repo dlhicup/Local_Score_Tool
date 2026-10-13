@@ -3,19 +3,138 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search, CheckCircle2, Circle, Film,
-  ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2, Trash2, X,
+  ArrowRight, FolderOpen, RefreshCw, ShieldCheck, ChevronLeft, ChevronRight, Upload, Loader2, Trash2,
   Download,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { api } from '../lib/api';
 import { EVENT_LABELS, LABEL_META, labelTitle } from '../lib/labels';
 import { bytes, relativeTime } from '../lib/format';
+import { saveQueue } from '../lib/queue';
 
 
 const STATUS = {
   todo: { label: 'Not started', icon: Circle, tone: 'text-ink-500' },
   done: { label: 'Has ground truth', icon: CheckCircle2, tone: 'text-pitch-400' },
 };
+
+/**
+ * A clip's type is the folder it sits in under video/ — "Full match",
+ * "30s clips", "gt", or whatever folders exist. The filter offers exactly the
+ * folders there are, so a new folder is a new filter with nothing to change.
+ * A clip loose at the top of video/ has no type and shows as Unsorted.
+ */
+const UNSORTED = '__none__';
+const typeOf = (v) => v.category || UNSORTED;
+const typeLabel = (key) => (key === UNSORTED ? 'Unsorted' : key);
+
+/** A tint per folder, from its name, so a folder keeps its colour as others come and go. */
+const TINTS = [
+  'border-sky-500/30 bg-sky-500/10 text-sky-300',
+  'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300',
+  'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
+  'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+];
+function typeTint(key) {
+  if (key === UNSORTED) return 'border-white/10 bg-white/[0.03] text-ink-500';
+  let h = 0;
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return TINTS[h % TINTS.length];
+}
+
+/**
+ * Where a clip is in the two-step review. Only a clip with labels has a place
+ * in it at all: one with none has nothing to review, and showing it under
+ * "needs 1st review" would bury the clips that actually do.
+ */
+const REVIEW_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'need1', label: 'Needs 1st review' },
+  { key: 'need2', label: 'Needs 2nd review' },
+  { key: 'done', label: 'Both passed' },
+];
+function reviewBucket(v) {
+  if (!v.project?.eventCount) return null;
+  const level = v.project.reviewLevel ?? 0;
+  return level === 0 ? 'need1' : level === 1 ? 'need2' : 'done';
+}
+
+/**
+ * One grid for the head and every row, written out in full so Tailwind sees
+ * the class — a class built from pieces at runtime is never generated.
+ */
+const GRID = 'grid-cols-[20px_minmax(0,1fr)_52px_72px_64px_56px_64px_248px_20px]';
+
+/** A row of mutually exclusive choices, each with how many it would show. */
+function Segmented({ label, options, value, onChange }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {label && <span className="mr-1 text-2xs font-semibold uppercase tracking-wider text-ink-500">{label}</span>}
+      {options.map((o) => (
+        <button
+          key={o.key}
+          onClick={() => onChange(o.key)}
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition ${
+            value === o.key
+              ? 'border-pitch-500/40 bg-pitch-500/[0.10] text-white'
+              : 'border-white/[0.07] text-ink-300 hover:border-white/20 hover:text-white'
+          }`}
+        >
+          {o.label}
+          {o.count !== undefined && (
+            <span className={`font-mono text-2xs tabular ${value === o.key ? 'text-pitch-400' : 'text-ink-500'}`}>{o.count}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The two review stages as boxes. A passed one is filled, and clicking it
+ * takes it off — the 1st takes the 2nd with it, since the 2nd cannot stand
+ * alone. One not yet passed is an outline that only explains itself; it is
+ * not a button, because there is nothing to click it for.
+ */
+function ReviewBoxes({ v, p, onClear }) {
+  const level = p?.reviewLevel ?? 0;
+  const stamps = [p?.firstReview ?? null, p?.secondReview ?? null];
+  return (
+    <span className="flex items-center gap-[3px]">
+      {[1, 2].map((n) => {
+        const name = n === 1 ? '1st review' : '2nd review';
+        const box = 'grid h-[18px] w-[18px] place-items-center rounded font-mono text-[10px] font-bold';
+        if (n <= level) {
+          const at = stamps[n - 1]?.at;
+          return (
+            <button
+              key={n}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onClear(v, n); }}
+              title={`${name} passed${at ? ` ${relativeTime(at)}` : ''} — click to take it off${n === 1 && level === 2 ? ' (the 2nd goes with it)' : ''}`}
+              className={`${box} bg-pitch-500 text-ink-950 transition hover:bg-avoid-500 hover:text-white`}
+            >
+              {n}
+            </button>
+          );
+        }
+        const title = !p
+          ? 'Nothing to review: this clip has no labels'
+          : n === 2 && level === 0
+            ? '2nd review comes after the 1st'
+            : `${name} not passed yet`;
+        const reachable = Boolean(p) && (n === 1 || level >= 1);
+        return (
+          <span key={n} title={title} className={`${box} border ${reachable ? 'border-white/20 text-ink-500' : 'border-white/[0.06] text-ink-700'}`}>
+            {n}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 function StatTile({ label, value, tone, active, onClick }) {
   return (
@@ -32,14 +151,14 @@ function StatTile({ label, value, tone, active, onClick }) {
 }
 
 function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
+  const type = typeOf(v);
   const s = STATUS[v.status];
   const Icon = s.icon;
   // A project with no events is not "0% reviewed" — there is nothing to review
   // yet. Treat it as untouched everywhere it shows up.
   const p = v.project?.eventCount ? v.project : null;
-  // Who signed this clip off, if anyone. The server clears it whenever the
-  // actions change, so its presence means "signed off and untouched since".
-  const reviewed = p?.reviewed ?? null;
+  // Which of the two reviews the clip has passed: 0, 1 or 2.
+  const level = p?.reviewLevel ?? 0;
   // How many reviews this clip has been through. Drives whether there is a
   // log to download for it at all.
   const reviewCount = p?.reviewCount ?? 0;
@@ -60,7 +179,7 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(v, 'annotate'); }
       }}
-      className="group grid w-full cursor-pointer grid-cols-[20px_minmax(0,1fr)_88px_64px_56px_80px_248px_20px] items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]"
+      className={`group grid w-full cursor-pointer ${GRID} items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.04]`}
     >
       <Icon size={15} className={`shrink-0 ${s.tone}`} title={s.label} />
 
@@ -79,6 +198,15 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
             {p.updatedAt ? `edited ${relativeTime(p.updatedAt)}` : ''}
           </span>
         )}
+      </span>
+
+      <span className="min-w-0">
+        <span
+          title={type === UNSORTED ? 'Not in a folder: loose at the top of video/' : `video/${type}/`}
+          className={`block truncate rounded border px-1.5 py-0.5 text-center text-[10px] font-semibold ${typeTint(type)}`}
+        >
+          {typeLabel(type)}
+        </span>
       </span>
 
       <span className="min-w-0">
@@ -117,37 +245,25 @@ function TaskRow({ v, onOpen, onDelete, onClearReviewed }) {
           disabled={!p}
           onClick={(e) => { e.stopPropagation(); onOpen(v, 'review'); }}
           title={
-            reviewed
-              ? `Reviewed${reviewed.by ? ` by ${reviewed.by}` : ''}`
-                + `${reviewed.at ? ` ${relativeTime(reviewed.at)}` : ''} — open to review it again`
-              : p
-                ? `Review the ${p.eventCount} action${p.eventCount === 1 ? '' : 's'} already labeled — your changes are recorded`
-                : 'Nothing to review yet: this clip has no labels'
+            !p
+              ? 'Nothing to review yet: this clip has no labels'
+              : level === 0
+                ? `Open for its 1st review — ${p.eventCount} action${p.eventCount === 1 ? '' : 's'}, your changes recorded`
+                : level === 1
+                  ? 'Open for its 2nd review — your changes recorded'
+                  : 'Both reviews passed — open to review it again'
           }
-          className={`flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-2xs font-semibold transition ${
-            reviewed
-              ? 'border-pitch-500/40 bg-pitch-500/[0.10] text-pitch-400 hover:bg-pitch-500/20'
-              : p
-                ? 'border-amber-500/40 bg-amber-500/[0.10] text-amber-400 hover:bg-amber-500/20'
-                : 'cursor-not-allowed border-white/[0.06] text-ink-700'
+          className={`rounded-md border px-2 py-1 text-2xs font-semibold transition ${
+            !p
+              ? 'cursor-not-allowed border-white/[0.06] text-ink-700'
+              : level === 2
+                ? 'border-white/10 text-ink-300 hover:border-white/25 hover:text-white'
+                : 'border-amber-500/40 bg-amber-500/[0.10] text-amber-400 hover:bg-amber-500/20'
           }`}
         >
-          {reviewed && <CheckCircle2 size={10} />}
-          {reviewed ? 'Reviewed' : 'Review'}
+          Review
         </button>
-
-        {/* Taking the mark off without opening the clip: the Library is where
-            the mark is read, so it is where it is most likely to be wrong. */}
-        {reviewed && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onClearReviewed(v); }}
-            title={`Remove the reviewed mark from ${v.name} — its actions are not touched`}
-            className="rounded-md border border-white/[0.07] px-1 py-1 text-ink-600 transition hover:border-avoid-500/40 hover:bg-avoid-500/10 hover:text-avoid-500"
-          >
-            <X size={11} />
-          </button>
-        )}
+        <ReviewBoxes v={v} p={p} onClear={onClearReviewed} />
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onOpen(v, 'annotate'); }}
@@ -210,7 +326,6 @@ export default function Library() {
   const [uploading, setUploading] = useState(null); // {name, pct} while importing
   const fileInput = useRef(null);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('all');
   const [opening, setOpening] = useState(null);
   const pageSize = useStore((s) => s.settings.pageSize) || 50;
 
@@ -231,6 +346,21 @@ export default function Library() {
     setParams(next, { replace: true });
   };
 
+  // The filters live in the URL beside the page, for the same reason: a
+  // refresh, or coming back from a clip, finds the list as it was left.
+  const category = params.get('cat') || 'all';
+  const review = REVIEW_FILTERS.some((f) => f.key === params.get('rev')) ? params.get('rev') : 'all';
+  const status = ['todo', 'done'].includes(params.get('st')) ? params.get('st') : 'all';
+  /** Change one filter; any change goes back to the first page. */
+  const setFilter = (key, value) => {
+    const next = new URLSearchParams(params);
+    if (!value || value === 'all') next.delete(key);
+    else next.set(key, value);
+    next.delete('page');
+    setParams(next, { replace: true });
+  };
+  const setStatus = (v) => setFilter('st', v);
+
   const deleteVideo = async (v) => {
     const labeled = v.project?.eventCount ? ` and its ${v.project.eventCount} saved action${v.project.eventCount === 1 ? '' : 's'}` : '';
     if (!window.confirm(`Remove ${v.name}${labeled}? This deletes the video file and its ground truth for everyone.`)) return;
@@ -243,11 +373,14 @@ export default function Library() {
     }
   };
 
-  /** Drop a clip's reviewed mark from the list, without opening it. */
-  const clearReviewed = async (v) => {
+  /** Take a review mark off a clip from the list, without opening it. */
+  const clearReviewed = async (v, stage) => {
+    const both = stage === 1 && (v.project?.reviewLevel ?? 0) === 2;
+    const what = both ? 'both review marks' : `the ${stage === 1 ? '1st' : '2nd'} review mark`;
+    if (!window.confirm(`Take ${what} off ${v.name}? Its actions are not touched.`)) return;
     try {
-      await api.clearReviewed(v.project.id);
-      toast(`Removed the reviewed mark from ${v.name}`, 'success');
+      await api.clearReviewed(v.project.id, stage);
+      toast(`Took ${what} off ${v.name}`, 'success');
       await load();
     } catch (err) {
       toast(err.message, 'error');
@@ -290,15 +423,53 @@ export default function Library() {
     load();
   }, [load]);
 
+  const all = data?.videos ?? [];
+
+  // The category is the outermost choice, so every count below it is
+  // counted within it: pick "30s clips" and "Needs 1st review" says how many
+  // 30-second clips need one, which is the number that is actually useful.
+  const inCategory = useMemo(
+    () => (category === 'all' ? all : all.filter((v) => typeOf(v) === category)),
+    [all, category],
+  );
+
+  // The folders there are, alphabetically, with Unsorted last.
+  const types = useMemo(() => {
+    const seen = [...new Set(all.map(typeOf))];
+    return seen.filter((k) => k !== UNSORTED).sort((a, b) => a.localeCompare(b))
+      .concat(seen.includes(UNSORTED) ? [UNSORTED] : []);
+  }, [all]);
+
+  const counts = useMemo(() => {
+    const cat = { all: all.length };
+    for (const v of all) cat[typeOf(v)] = (cat[typeOf(v)] ?? 0) + 1;
+    const rev = { all: inCategory.length, need1: 0, need2: 0, done: 0 };
+    const st = { all: inCategory.length, todo: 0, done: 0 };
+    for (const v of inCategory) {
+      const b = reviewBucket(v);
+      if (b) rev[b] += 1;
+      st[v.status] = (st[v.status] ?? 0) + 1;
+    }
+    return { cat, rev, st };
+  }, [all, inCategory]);
+
   const visible = useMemo(() => {
-    const list = data?.videos ?? [];
     const q = query.trim().toLowerCase();
-    return list.filter((v) => {
+    return inCategory.filter((v) => {
       if (status !== 'all' && v.status !== status) return false;
+      if (review !== 'all' && reviewBucket(v) !== review) return false;
       if (q && !v.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [data, query, status]);
+  }, [inCategory, query, status, review]);
+
+  /** What the list is, in words — shown beside Previous and Next in a clip. */
+  const listLabel = [
+    category === 'all' ? 'All clips' : typeLabel(category),
+    review === 'all' ? null : REVIEW_FILTERS.find((f) => f.key === review).label.toLowerCase(),
+    status === 'all' ? null : status === 'todo' ? 'not started' : 'annotated',
+    query.trim() ? `matching "${query.trim()}"` : null,
+  ].filter(Boolean).join(' · ');
 
   /**
    * `review` opens the same workspace with a record kept of what gets changed;
@@ -306,6 +477,8 @@ export default function Library() {
    * what it has always done.
    */
   const open = async (v, mode = 'annotate') => {
+    // Previous and Next in the workspace walk exactly this list.
+    saveQueue(visible, listLabel);
     setOpening(v.name);
     try {
       const project = await openTask(v.name);
@@ -318,7 +491,7 @@ export default function Library() {
 
   /** The point of a queue: skip the picker and go straight to the next clip. */
   const openNext = () => {
-    const next = (data?.videos ?? []).find((v) => v.status === 'todo');
+    const next = inCategory.find((v) => v.status === 'todo');
     if (next) open(next);
     else toast('Every clip has ground truth', 'success');
   };
@@ -446,12 +619,43 @@ export default function Library() {
           </div>
         </header>
 
-        {/* Progress across the corpus, doubling as the status filter */}
-        {s && (
-          <div className="mb-5 flex gap-2">
-            <StatTile label="Clips" value={s.total} tone="text-white" active={status === 'all'} onClick={() => { setStatus('all'); setPage(1); }} />
-            <StatTile label="Not started" value={s.todo} tone="text-ink-300" active={status === 'todo'} onClick={() => { setStatus('todo'); setPage(1); }} />
-            <StatTile label="Annotated" value={s.done} tone="text-pitch-400" active={status === 'done'} onClick={() => { setStatus('done'); setPage(1); }} />
+        {/* Which kind of clip. Everything below is counted within it. */}
+        {data && (
+          <div className="mb-3">
+            <Segmented
+              label="Type"
+              value={category}
+              onChange={(v) => setFilter('cat', v)}
+              options={[
+                { key: 'all', label: 'All', count: counts.cat.all },
+                ...types.map((k) => ({ key: k, label: typeLabel(k), count: counts.cat[k] ?? 0 })),
+              ]}
+            />
+          </div>
+        )}
+
+        {/* Progress within the chosen type, doubling as the status filter */}
+        {data && (
+          <div className="mb-3 flex gap-2">
+            <StatTile label="Clips" value={counts.st.all} tone="text-white" active={status === 'all'} onClick={() => setStatus('all')} />
+            <StatTile label="Not started" value={counts.st.todo} tone="text-ink-300" active={status === 'todo'} onClick={() => setStatus('todo')} />
+            <StatTile label="Annotated" value={counts.st.done} tone="text-pitch-400" active={status === 'done'} onClick={() => setStatus('done')} />
+          </div>
+        )}
+
+        {/* Where clips are in the two-step review, within the chosen type. */}
+        {data && (
+          <div className="mb-5">
+            <Segmented
+              label="Review"
+              value={review}
+              onChange={(v) => setFilter('rev', v)}
+              options={REVIEW_FILTERS.map((f) => ({
+                key: f.key,
+                label: f.label,
+                count: f.key === 'all' ? undefined : counts.rev[f.key],
+              }))}
+            />
           </div>
         )}
 
@@ -465,7 +669,7 @@ export default function Library() {
                   setQuery(e.target.value);
                   setPage(1);
                 }}
-                placeholder={`Search ${s?.total ?? ''} clips by filename…`}
+                placeholder={`Search ${inCategory.length} clips by filename…`}
                 className="field py-2 pl-9 text-xs"
               />
             </div>
@@ -476,10 +680,11 @@ export default function Library() {
               clip name — the only column whose content cannot be guessed — to
               nothing, and rather than clipping the buttons off the right. */}
           <div className="overflow-x-auto">
-            <div className="min-w-[936px]">
-            <div className="grid grid-cols-[20px_minmax(0,1fr)_88px_64px_56px_80px_248px_20px] gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600">
+            <div className="min-w-[968px]">
+            <div className={`grid ${GRID} gap-3 border-b border-white/[0.06] px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-ink-600`}>
               <span />
               <span>Clip</span>
+              <span>Type</span>
               <span>Assigned to</span>
               <span className="text-right">Size</span>
               <span className="text-right">Actions</span>

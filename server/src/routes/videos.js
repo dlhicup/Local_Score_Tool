@@ -9,6 +9,7 @@ import {
 } from '../services/store.js';
 import { getAssignments, assignClips } from '../services/users.js';
 import { removeGroundTruth } from '../services/gtfile.js';
+import { clipCategory } from '../services/category.js';
 import { ensureProxy, proxyState, removeProxy } from '../services/proxy.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -154,6 +155,9 @@ router.get('/videos', requireAuth, async (req, res, next) => {
 
       videos.push({
         name,
+        // The folder it sits in under video/ — its type. Null when it is loose
+        // at the top. See category.js.
+        category: clipCategory(index.get(name).rel),
         // Where it sits under video/, so a clip in a subfolder is findable.
         rel: index.get(name).rel,
         size: stat.size,
@@ -171,8 +175,10 @@ router.get('/videos', requireAuth, async (req, res, next) => {
               duration: p.duration,
               updatedAt: p.meta?.updatedAt ?? null,
               review: p.review ?? null,
-              // Who signed the clip off, if anyone — drives the Reviewed button.
-              reviewed: p.reviewed ?? null,
+              // Which of the two reviews the clip has passed: 0, 1 or 2.
+              reviewLevel: p.reviewLevel ?? 0,
+              firstReview: p.firstReview ?? null,
+              secondReview: p.secondReview ?? null,
               // Whether this clip has a review log worth downloading.
               reviewCount: p.reviewCount ?? 0,
             }

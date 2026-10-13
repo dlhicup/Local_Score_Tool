@@ -94,15 +94,21 @@ export const api = {
 
   // Drops the reviewed mark on its own, without writing the actions — so a
   // reviewer holding unsaved edits does not have them saved as a side effect.
-  clearReviewed: (id) => request(`/projects/${encodeURIComponent(id)}/reviewed`, { method: 'DELETE' }),
+  // `stage` 2 takes the second review off; 1 takes the first, and the second
+  // with it. Omitted, the highest the clip has.
+  clearReviewed: (id, stage = null) =>
+    request(`/projects/${encodeURIComponent(id)}/reviewed${stage ? `?stage=${stage}` : ''}`, { method: 'DELETE' }),
 
-  saveProject: (id, project, review = null, finishReview = false) =>
+  // `reviewing` says the save came from the review page, which decides what
+  // a change does to the clip's review marks — see the save route.
+  saveProject: (id, project, { review = null, finishReview = false, reviewing = false } = {}) =>
     request(`/projects/${id}`, {
       method: 'PUT',
       body: {
         project,
         ...(review ? { review } : {}),
         ...(finishReview ? { finishReview: true } : {}),
+        ...(reviewing ? { reviewing: true } : {}),
       },
     }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),

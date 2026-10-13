@@ -138,7 +138,7 @@ access to every clip, so run this only on a network you trust.
 
 | page | what it's for |
 | --- | --- |
-| **Library** | every clip, its status, and how much is annotated. Open one to start. Drag files in to import them. |
+| **Library** | every clip, its type, its status and where it is in the two reviews — filterable by all three. Open one to start. Drag files in to import them. |
 | **Annotate** | the workspace: player, lane timeline, inspector. Opened in review mode it also records what you change |
 | **Events guide** | the 15 labels and what each one means |
 | **Reference** | worked examples — a clip beside its ground truth, read-only, to learn the conventions |
@@ -166,6 +166,37 @@ The badge beside the action count in the header shows how many actions are
 marked unsure, and flags the label checks from the guide: a goal with no shot on
 its frame, an aerial duel with only one player marked. Click a line to jump to
 it. None of it blocks a save.
+
+### Finding clips: type, status, review
+
+Three filters sit above the Library list, and they combine:
+
+- **Type** — the folder a clip sits in under `video/`. `video/Full match/`,
+  `video/30s clips/` and `video/gt/` give you those three filters; any other
+  folder you make becomes a filter of its own, with nothing to configure. A clip
+  loose at the top of `video/` shows as **Unsorted**. Only the first folder
+  counts, so a type can have subfolders of its own.
+- **Status** — the tiles: all clips, not started, annotated.
+- **Review** — needs 1st review, needs 2nd review, both passed. Only clips with
+  labels are counted here: a clip with nothing on it has nothing to review.
+
+Every count is counted within the type you picked, so **30s clips → Needs 1st
+review** shows exactly how many 30-second clips are waiting, and lists them.
+The filters live in the address bar, so a refresh — or coming back from a
+clip — finds the list the way you left it.
+
+### Moving between clips
+
+In the workspace, **‹ ›** beside the clip name go to the previous and next clip
+*in the list you opened it from* — filter the Library to "30s clips that need a
+1st review", open one, and **›** takes you to the next of those, not the next
+file on disk. The counter shows where you are, e.g. `12 / 557`. The list is a
+snapshot taken when you opened the clip, so a clip you just finished is still
+there to go back to.
+
+Moving keeps the mode: reviewing, the next clip opens for review too, and clips
+with no labels are skipped. If the clip you are leaving has unsaved changes it
+asks first — OK saves them and moves on, Cancel stays.
 
 ### Reviewing someone else's clip
 
@@ -200,23 +231,39 @@ label and one more of the new one.
 The header shows a **Reviewing** badge whenever you are in that mode, so it is
 never possible to be recording without knowing.
 
-**Finish review** — at the bottom of that panel — saves the clip and signs it
-off in one request, so a sign-off can never land without the actions it signs
-off on. The clip's row in the Library then reads **Reviewed** in green instead
-of **Review**, with who signed it off and when in the tooltip. It is still
-clickable: a signed-off clip can be reopened and reviewed again.
+#### Two reviews, in order
 
-A sign-off means *"reviewed, and nothing has happened to it since"*. Any save
-that changes the actions clears it — from either page, by anyone, including a
-changed tag or a moved frame. The panel warns you while you hold unsaved
-changes, and the button goes back to **Finish review** so you can sign the new
-state off. A save that changes nothing leaves the sign-off alone.
+A clip passes a **1st review** and then a **2nd**. The button at the bottom of
+the review panel says which one it will sign — **Finish 1st review** on a clip
+nobody has reviewed, **Finish 2nd review** once the 1st has passed — and it
+saves the clip and signs in one request, so a sign-off can never land without
+the actions it signs off on. The 2nd cannot be signed before the 1st.
 
-You can also take a mark off by hand, which is what you want when a clip was
-signed off too early or by mistake:
+Every Library row shows two boxes, **1** and **2**, filled as each review
+passes, with when in the tooltip.
 
-- the **✕** beside **Reviewed** in the Library, which needs no clip opened;
-- **Unmark** beside **Reviewed** in the review panel.
+What happens to the boxes when somebody changes the actions depends on where
+the change was made:
+
+| change made… | on a clip that has passed | the boxes become |
+| --- | --- | --- |
+| in **Review** | nothing, or the 1st | unchanged — the edit is part of the review in progress |
+| in **Review** | both | **1** only — the 2nd is being redone, until you finish it again |
+| in **Annotate** | either or both | none — the change happened outside any review |
+
+The first row is what makes two reviewers possible: the 2nd reviewer is
+expected to fix things, and if their first save took the 1st review away they
+could never finish the 2nd. The last row keeps the boxes honest: a clip showing
+two passed reviews over actions nobody reviewed would be worse than showing
+none. A save that changes nothing never touches them. The panel warns you
+before a save would take a box away.
+
+You can also take a mark off by hand, when a clip was signed off too early or
+by mistake:
+
+- click a filled box in the Library — **2** takes the 2nd off; **1** takes the
+  1st, and the 2nd with it, since the 2nd cannot stand alone. It asks first;
+- **Unmark** in the review panel takes off the highest one.
 
 Either way only the mark goes. The actions are not rewritten, and if you are
 holding unsaved edits when you unmark, they stay unsaved — unmarking is not a
@@ -247,7 +294,8 @@ Review log — Veo U19 Sl Gw18 Paok-Volos 3-0 Cut
 Annotated by Tillottoma
 1921 actions in the ground truth now
 1924 actions became 1921 over 3 reviews: 1 added, 4 removed, 1 re-tagged.
-Signed off on 2026-10-06 05:41
+1st review: passed 2026-10-06 05:41
+2nd review: not yet
 
   - At frame 25 (0:01.00), the pass action's team was updated from Team A to Team B.
   - At frame 70 (0:02.80), the tackle was removed.
@@ -276,7 +324,7 @@ The CSV says the same thing, one row per change, with the sentence in a
 | `from_frame`, `from_time` | for a retime, where the action was before |
 | `tags` | for a re-tag, which tags moved |
 | `recorded_at` | when the review that made this change was saved |
-| `signed_off_by`, `signed_off_at` | the clip's sign-off, if it has one |
+| `first_review_by`, `first_review_at`, `second_review_by`, `second_review_at` | the two sign-offs, where they exist |
 | `actions_now` | how many actions the ground truth holds today |
 | `log_file` | which `Review.<clip>.json` the row came from |
 
@@ -481,7 +529,8 @@ its history along — the same reason this project keeps one file per clip.
   "reviews": 3,
   "actions": {"first":1924,"now":1921},
   "totals": {"added":{"clearance":1},"removed":{"pass":1,"pass_received":2,"clearance":1},"retimed":0,"retagged":1},
-  "signedOff": {"by": "local", "at": "2026-10-06T05:41:13.734Z", "actions": 1921},
+  "firstReview": {"by": "local", "at": "2026-10-06T05:41:13.734Z", "actions": 1921},
+  "secondReview": {"by": "local", "at": "2026-10-07T09:12:40.118Z", "actions": 1921},
   "changes": [
     {"text":"At frame 70 (0:02.80), the tackle was removed.","kind":"removed","action":"tackle","frame":70,"time":"0:02.80","at":"2026-10-06T03:57:07.815Z"},
     {"text":"At frame 150 (0:06.00), the action was clearance, but it was updated to block.","kind":"relabelled","action":"block","frame":150,"time":"0:06.00","wasAction":"clearance","at":"2026-10-06T04:02:11.004Z"}
@@ -509,12 +558,16 @@ A `notes` array appears when some changes could not be recorded individually,
 saying how many and why, so the totals never look larger than the list without
 explanation.
 
-`signedOff` is the sign-off: the clip has been reviewed and nothing has changed
-since. **Finish review** writes it, any save that changes the actions deletes
-it, and it can be removed by hand from the Library or the review panel. Its
-presence is a claim about the ground truth as it stands, not a record that
-somebody once looked at the clip. The Library reads it to show **Reviewed**
-instead of **Review**.
+`firstReview` and `secondReview` are the two sign-offs: who, when, and over how
+many actions. **Finish 1st review** / **Finish 2nd review** write them; the
+rules above say when a change takes them away. A `secondReview` without a
+`firstReview` is read as neither past the first — the 2nd cannot stand alone.
+
+A review recorded after the fact, rather than by pressing Finish in the app,
+carries `"declared"` — the date it was entered — and `"at": null`, because when
+the review actually happened is not known and is not made up. An older file
+that has a single `signedOff` instead reads it as the 1st review, and writes it
+under the new name the next time it is saved.
 
 A review whose account of the edit does not add up against the file is counted
 but not listed: the counts are taken by comparing the file before and after
@@ -536,7 +589,11 @@ a field another tool added is never dropped.
 
 **Organise both folders however you like.** `groundtruth/` and `video/` are
 searched to any reasonable depth, and a file is matched to a clip **by name**,
-not by where it sits — so a hand-in can stay exactly as it arrived:
+not by where it sits — so a hand-in can stay exactly as it arrived. The one
+place a folder means something is the first level of `video/`, which is a clip's
+**type** in the Library (see above). Moving a video between those folders is
+how you change its type; its ground truth and review history follow it by
+name and do not need moving.
 
 ```
 groundtruth/

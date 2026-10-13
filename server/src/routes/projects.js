@@ -56,20 +56,32 @@ router.get('/projects/:id', requireAuth, async (req, res, next) => {
 });
 
 /**
- * Take a clip's reviewed mark off again.
+ * Take a review mark off again: `?stage=2` the second, `?stage=1` the first —
+ * and with it the second, which cannot stand alone. With no stage, the
+ * highest one the clip has.
  *
- * Its own route rather than a flag on the save, because clearing the mark is
+ * Its own route rather than a flag on the save, because clearing a mark is
  * about the clip's status and not its actions: a reviewer who has unsaved edits
- * on screen must be able to drop the mark without those edits being written
+ * on screen must be able to drop a mark without those edits being written
  * along with it. The file is rewritten with the actions it already holds.
  */
 router.delete('/projects/:id/reviewed', requireAuth, async (req, res, next) => {
   try {
     const project = await resolveProject(req.params.id);
     if (!(await mayTouch(req.user, project))) return res.status(403).json({ error: 'This clip is not assigned to you' });
-    if (!project.meta?.reviewed) return res.json({ reviewed: null, changed: false });
-    await writeProject(project, { reviewed: null });
-    res.json({ reviewed: null, changed: true });
+    const level = project.meta?.reviewLevel ?? 0;
+    if (!level) return res.json({ reviewLevel: 0, changed: false });
+    const asked = Number(req.query.stage);
+    const stage = asked === 1 || asked === 2 ? asked : level;
+    if (stage > level) return res.json({ reviewLevel: level, changed: false });
+    const stages = stage === 1 ? { first: null, second: null } : { second: null };
+    const { project: stored } = await writeProject(project, { stages });
+    res.json({
+      reviewLevel: stored.meta?.reviewLevel ?? 0,
+      firstReview: stored.meta?.firstReview ?? null,
+      secondReview: stored.meta?.secondReview ?? null,
+      changed: true,
+    });
   } catch (err) {
     next(err);
   }
@@ -111,21 +123,36 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
       : null;
 
     /**
-     * Finishing a review signs the clip off: who, when, and over how many
-     * actions. The sign-off is cleared instead whenever a save changes the
-     * actions, whoever made it and from whichever page — otherwise a clip could
-     * sit marked "reviewed" after somebody had rewritten half of it, which is
-     * worse than carrying no mark at all.
+     * Two reviews, in order. Finishing signs the next one: the first on an
+     * unreviewed clip, the second on a clip that has had its first, and the
+     * second again on a clip that has had both.
+     *
+     * What a change to the actions clears depends on where it came from.
+     *
+     * From the review page, the edit is part of the review in progress — the
+     * second reviewer is expected to fix things — so it keeps every stage
+     * below the one being worked on. Clearing the first review the moment the
+     * second reviewer touched anything would make the second review
+     * impossible to finish. A clip that had passed both is being reviewed
+     * again, so it loses its second until that is finished again.
+     *
+     * From the annotating page, a change to a reviewed clip happened outside
+     * any review, so both marks go. The boxes are a claim about the file as it
+     * stands; a clip showing two passed reviews over actions nobody reviewed
+     * would be worse than showing none.
      */
     const finishing = req.body?.finishReview === true;
+    const reviewing = req.body?.reviewing === true || finishing;
     const changed = !sameActions(existing.events, events);
-    const reviewed = finishing
-      ? { by: req.user?.username ?? null, at: new Date().toISOString(), actions: events.length }
-      : changed
-        ? null
-        : undefined; // untouched: leave whatever the file already says
+    const level = existing.meta?.reviewLevel ?? 0;
+    const stamp = () => ({ by: req.user?.username ?? null, at: new Date().toISOString(), actions: events.length });
 
-    const { project: stored, written } = await writeProject(project, { logEntry: entry, reviewed });
+    let stages; // undefined: leave the review marks as they are
+    if (finishing) stages = level === 0 ? { first: stamp(), second: null } : { second: stamp() };
+    else if (changed && !reviewing) stages = level ? { first: null, second: null } : undefined;
+    else if (changed && level === 2) stages = { second: null };
+
+    const { project: stored, written } = await writeProject(project, { logEntry: entry, stages });
 
     res.json({
       project: stored,
@@ -133,7 +160,11 @@ router.put('/projects/:id', requireAuth, async (req, res, next) => {
       groundTruthFile: written ? { path: written.path, count: written.count } : null,
       saved: Boolean(written),
       review: entry,
-      reviewed: stored.meta?.reviewed ?? null,
+      reviewLevel: stored.meta?.reviewLevel ?? 0,
+      firstReview: stored.meta?.firstReview ?? null,
+      secondReview: stored.meta?.secondReview ?? null,
+      // Which stage this save signed, if it signed one, so the toast can say.
+      signedStage: finishing ? (level === 0 ? 1 : 2) : null,
     });
   } catch (err) {
     next(err);

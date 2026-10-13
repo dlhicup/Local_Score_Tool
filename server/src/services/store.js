@@ -8,7 +8,7 @@ import {
   findGroundTruth, groundTruthIndex, toFrame, GT_DIR,
 } from './gtfile.js';
 import { probeVideo } from './media.js';
-import { readReviewFile, reviewStatus, appendReview, setSignedOff } from './reviewfile.js';
+import { readReviewFile, reviewStatus, appendReview, setReviewStages, reviewLevel } from './reviewfile.js';
 import { sweepTempFiles } from './atomic.js';
 
 /**
@@ -165,7 +165,9 @@ export async function projectForClip(filename) {
       // Both come from Review.<clip>.json beside the ground truth, not from
       // the clip file: review bookkeeping does not belong in the deliverable.
       reviews: review.reviews,
-      reviewed: review.signedOff,
+      reviewLevel: reviewLevel(review),
+      firstReview: review.firstReview,
+      secondReview: review.secondReview,
     },
   };
 }
@@ -204,7 +206,9 @@ export async function listProjects() {
       duration: media.duration,
       meta: { ...times, review: extra.review ?? null, annotator: extra.annotator ?? null },
       review: extra.review ?? null,
-      reviewed: status.signedOff,
+      reviewLevel: status.level,
+      firstReview: status.firstReview,
+      secondReview: status.secondReview,
       // Just the count: a row needs to know whether there is a log to offer,
       // not what is in it.
       reviewCount: status.reviewCount,
@@ -243,14 +247,14 @@ export async function readProject(id) {
  * keeps beside them. Anything already in the file that we do not understand is
  * read back and preserved, so a field another tool added is never dropped.
  *
- * `logEntry` is one entry for the clip's review history and `reviewed` its
- * sign-off. Neither is written into the clip file: both go to
- * Review.<clip>.json beside it, so what gets handed off is the actions and
- * nothing else. Passing `reviewed: null` clears the sign-off, which is what
- * happens whenever the actions change — so "reviewed" keeps meaning "signed
- * off, and nothing has happened to it since".
+ * `logEntry` is one entry for the clip's review history and `stages` a change
+ * to its two review sign-offs, `{ first, second }` — each undefined to leave
+ * it, null to clear it, or a stamp to set it. Neither goes into the clip file:
+ * both live in Review.<clip>.json beside it, so what gets handed off is the
+ * actions and nothing else. Which stages a save sets or clears is decided by
+ * the save route, which knows whether the save came from a review.
  */
-export async function writeProject(project, { logEntry = null, reviewed } = {}) {
+export async function writeProject(project, { logEntry = null, stages } = {}) {
   const filename = project?.video?.filename;
   if (!filename) throw Object.assign(new Error('Project has no clip'), { status: 400 });
 
@@ -277,7 +281,7 @@ export async function writeProject(project, { logEntry = null, reviewed } = {}) 
   // After the actions, so a crash between the two leaves a clip whose history
   // is behind rather than one claiming a change that was never written.
   if (logEntry) await appendReview(filename, logEntry);
-  if (reviewed !== undefined) await setSignedOff(filename, reviewed);
+  if (stages) await setReviewStages(filename, stages);
   return { project: await projectForClip(filename), written };
 }
 

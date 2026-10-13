@@ -56,8 +56,22 @@ const emptyDoc = (videoName) => ({
   totals: { added: {}, removed: {}, retimed: 0, retagged: 0 },
   changes: [],
   notes: [],
-  signedOff: null,
+  firstReview: null,
+  secondReview: null,
 });
+
+/**
+ * A clip passes two reviews, in order. Each is a sign-off — who, when, over
+ * how many actions — and the second cannot stand without the first: a file
+ * that claims one without the other is read as having neither past the first.
+ *
+ * 0  not reviewed
+ * 1  first review passed, waiting for the second
+ * 2  both passed
+ */
+export const reviewLevel = (doc) => (doc?.firstReview ? (doc.secondReview ? 2 : 1) : 0);
+
+const asStamp = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : null);
 
 const asObj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 const asArr = (v) => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : []);
@@ -76,6 +90,9 @@ export async function readReviewFile(videoName) {
 
 function normalise(doc, videoName) {
   const totals = asObj(doc?.totals);
+  // `signedOff` is what a single review was called before there were two.
+  // It was a first review in all but name, so it reads as one.
+  const first = asStamp(doc?.firstReview) || asStamp(doc?.signedOff);
   return {
     clip: typeof doc?.clip === 'string' ? doc.clip : clipBase(videoName),
     summary: typeof doc?.summary === 'string' ? doc.summary : null,
@@ -91,7 +108,8 @@ function normalise(doc, videoName) {
     },
     changes: asArr(doc?.changes),
     notes: Array.isArray(doc?.notes) ? doc.notes.filter((x) => typeof x === 'string') : [],
-    signedOff: doc?.signedOff && typeof doc.signedOff === 'object' ? doc.signedOff : null,
+    firstReview: first,
+    secondReview: first ? asStamp(doc?.secondReview) : null,
   };
 }
 
@@ -103,6 +121,9 @@ const tallyTotal = (o) => Object.values(o ?? {}).reduce((n, v) => n + asNum(v), 
 
 /** One line describing everything the clip has been through. */
 function summarise(doc) {
+  // A clip can pass a review without anybody changing a thing, and a review
+  // recorded by hand has no edits behind it at all. Neither is "reviewed once".
+  if (!doc.reviews) return 'No changes recorded.';
   const { added, removed, retimed, retagged } = doc.totals;
   const bits = [];
   if (tallyTotal(added)) bits.push(`${tallyTotal(added)} added`);
@@ -135,7 +156,7 @@ async function persist(videoName, doc) {
   const target = await reviewPathFor(videoName);
   if (!target) return null;
 
-  if (!doc.changes.length && !doc.notes.length && !doc.signedOff && !doc.reviews) {
+  if (!doc.changes.length && !doc.notes.length && !doc.firstReview && !doc.reviews) {
     await fs.unlink(target).catch((e) => { if (e.code !== 'ENOENT') throw e; });
     return { path: target, removed: true };
   }
@@ -153,7 +174,8 @@ async function persist(videoName, doc) {
   ];
   if (doc.actions) head.push(`  "actions": ${JSON.stringify(doc.actions)}`);
   head.push(`  "totals": ${JSON.stringify(doc.totals)}`);
-  if (doc.signedOff) head.push(`  "signedOff": ${JSON.stringify(doc.signedOff)}`);
+  if (doc.firstReview) head.push(`  "firstReview": ${JSON.stringify(doc.firstReview)}`);
+  if (doc.firstReview && doc.secondReview) head.push(`  "secondReview": ${JSON.stringify(doc.secondReview)}`);
   if (doc.notes.length) {
     head.push(`  "notes": [\n${doc.notes.map((n) => `    ${JSON.stringify(n)}`).join(',\n')}\n  ]`);
   }
@@ -199,17 +221,29 @@ export async function appendReview(videoName, entry) {
   return persist(videoName, doc);
 }
 
-/** Record or clear the sign-off. `null` clears it. */
-export async function setSignedOff(videoName, value) {
+/**
+ * Set or clear review stages. Each key: undefined leaves it, null clears it,
+ * a stamp sets it. Clearing the first clears the second with it, since the
+ * second cannot stand alone.
+ */
+export async function setReviewStages(videoName, { first, second } = {}) {
   const doc = await readReviewFile(videoName);
-  doc.signedOff = value || null;
+  if (first !== undefined) doc.firstReview = first || null;
+  if (second !== undefined) doc.secondReview = second || null;
+  if (!doc.firstReview) doc.secondReview = null;
   return persist(videoName, doc);
 }
 
 /** Just what a listing needs, without carrying the whole history around. */
 export async function reviewStatus(videoName) {
   const doc = await readReviewFile(videoName);
-  return { signedOff: doc.signedOff, reviewCount: doc.reviews, changeCount: doc.changes.length };
+  return {
+    level: reviewLevel(doc),
+    firstReview: doc.firstReview,
+    secondReview: doc.secondReview,
+    reviewCount: doc.reviews,
+    changeCount: doc.changes.length,
+  };
 }
 
 /**

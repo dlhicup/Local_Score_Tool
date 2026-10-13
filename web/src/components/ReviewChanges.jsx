@@ -52,11 +52,40 @@ function Breakdown({ title, tally, sign }) {
   );
 }
 
+/** One review stage: its box, and who passed it when — or that it has not been. */
+function StageLine({ n, stamp, blocked }) {
+  const name = n === 1 ? '1st review' : '2nd review';
+  return (
+    <div className="flex items-center gap-2 text-2xs">
+      <span
+        className={`grid h-4 w-4 shrink-0 place-items-center rounded font-mono text-[10px] font-bold ${
+          stamp ? 'bg-pitch-500 text-ink-950' : 'border border-white/15 text-ink-600'
+        }`}
+      >
+        {n}
+      </span>
+      {stamp ? (
+        <span className="text-ink-300">
+          {name} passed{stamp.at ? ` ${relativeTime(stamp.at)}` : ''}
+          {typeof stamp.actions === 'number' ? ` over ${stamp.actions} actions` : ''}
+        </span>
+      ) : (
+        <span className="text-ink-600">{name} {blocked ? 'comes after the 1st' : 'not yet'}</span>
+      )}
+    </div>
+  );
+}
+
 export default function ReviewChanges() {
   const events = useStore((s) => s.events);
   const baseline = useStore((s) => s.reviewBaseline);
-  const priorCount = useStore((s) => s.project?.meta?.reviews?.length ?? 0);
-  const reviewed = useStore((s) => s.project?.meta?.reviewed ?? null);
+  // A count since the log was flattened into one list, not an array of
+  // reviews — reading `.length` off it gave undefined, so this line never
+  // appeared.
+  const priorCount = useStore((s) => Number(s.project?.meta?.reviews) || 0);
+  const level = useStore((s) => s.project?.meta?.reviewLevel ?? 0);
+  const first = useStore((s) => s.project?.meta?.firstReview ?? null);
+  const second = useStore((s) => s.project?.meta?.secondReview ?? null);
   const clip = useStore((s) => s.project?.video?.filename ?? null);
   const finishReview = useStore((s) => s.finishReview);
   const clearReviewed = useStore((s) => s.clearReviewed);
@@ -65,9 +94,11 @@ export default function ReviewChanges() {
 
   const d = useMemo(() => reviewDiff(baseline, events), [baseline, events]);
 
-  // Signed off, and nothing touched since: the one state in which there is
-  // nothing left to do on this clip.
-  const settled = Boolean(reviewed) && d.touched === 0;
+  // Which review finishing would sign: the 1st on an unreviewed clip, the
+  // 2nd once the 1st has passed.
+  const nextStage = level === 0 ? 1 : 2;
+  // Both passed, and nothing touched since: nothing left to do on this clip.
+  const settled = level === 2 && d.touched === 0;
 
   const finish = async () => {
     setFinishing(true);
@@ -132,10 +163,12 @@ export default function ReviewChanges() {
             disabled={finishing || clearing}
             title={
               settled
-                ? 'Already signed off. Press to sign off again.'
-                : reviewed
-                  ? 'Sign the clip off again, with the changes you have just made'
-                  : 'Save the clip and mark it reviewed'
+                ? 'Both reviews have passed. Press to sign the 2nd off again.'
+                : nextStage === 1
+                  ? 'Save the clip and pass its 1st review'
+                  : level === 2
+                    ? 'Save the clip and sign its 2nd review off again, with the changes you have just made'
+                    : 'Save the clip and pass its 2nd review'
             }
             className={
               settled
@@ -144,36 +177,34 @@ export default function ReviewChanges() {
             }
           >
             {finishing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-            {finishing ? 'Finishing…' : settled ? 'Reviewed' : 'Finish review'}
+            {finishing ? 'Finishing…' : settled ? 'Both reviews passed' : `Finish ${nextStage === 1 ? '1st' : '2nd'} review`}
           </button>
 
-          {/* Only offered when there is a mark to take off. Clears the mark and
-              nothing else: any edits on screen are still unsaved afterwards. */}
-          {reviewed && (
+          {/* Only offered when there is a mark to take off. Takes off the
+              highest one and nothing else: edits on screen stay unsaved. */}
+          {level > 0 && (
             <button
               onClick={unreview}
               disabled={finishing || clearing}
-              title="Take the reviewed mark off this clip. Its actions are not touched."
+              title={`Take the ${level === 2 ? '2nd' : '1st'} review mark off this clip. Its actions are not touched.`}
               className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-semibold text-ink-400 transition hover:border-avoid-500/40 hover:bg-avoid-500/10 hover:text-avoid-500 disabled:opacity-50"
             >
               {clearing ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
-              Unmark
+              Unmark {level === 2 ? '2nd' : '1st'}
             </button>
           )}
           </div>
 
-        {reviewed ? (
-          <p className="mt-1.5 text-2xs leading-snug text-ink-500">
-            Signed off{reviewed.by ? ` by ${reviewed.by}` : ''}
-            {reviewed.at ? ` ${relativeTime(reviewed.at)}` : ''}
-            {typeof reviewed.actions === 'number' ? ` over ${reviewed.actions} actions` : ''}.
-            {d.touched > 0 && (
-              <span className="text-amber-400"> Your changes clear that until you finish again.</span>
-            )}
-          </p>
-        ) : (
-          <p className="mt-1.5 text-2xs leading-snug text-ink-600">
-            Marks the clip reviewed in the Library. Any later change to its actions clears the mark.
+        <div className="mt-2 space-y-1">
+          <StageLine n={1} stamp={first} />
+          <StageLine n={2} stamp={second} blocked={!first} />
+        </div>
+        {/* Edits made here are part of the review in progress, so they keep
+            the 1st review while the 2nd happens. Only a clip that has passed
+            both loses something, and it should say so before the save. */}
+        {level === 2 && d.touched > 0 && (
+          <p className="mt-1.5 text-2xs leading-snug text-amber-400">
+            Saving these changes takes the 2nd review off until you finish it again.
           </p>
         )}
 
