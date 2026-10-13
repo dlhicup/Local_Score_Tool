@@ -103,6 +103,11 @@ Copy the team's clips into the **`video/`** folder on the host, or drag them
 into the Library page in the browser. See
 [The shared videos folder](#the-shared-videos-folder).
 
+Then run `npm run sort-videos` to put them into their type folders —
+`30s clips/`, `gt/`, `Full match/` — by name. `npm run build` does this for you at
+the end, so after the first build it is already done. The rule and what it
+will and won't touch are in `video/README.md`.
+
 That's the install done.
 
 ### Keeping it running
@@ -122,12 +127,14 @@ pm2 startup          # follow the command it prints
 ```bash
 git pull
 npm install
-npm run build        # required — otherwise the team still gets the old app
+npm run build        # required — rebuilds the app, then sorts any loose videos
 pm2 restart score-gt # or stop and re-run npm start
 ```
 
 Your videos, annotations and ground-truth files live outside git and survive
-updates untouched.
+updates untouched — except that a video loose at the top of `video/` is moved
+into its type folder by the build. Nothing already in a folder is moved, and
+nothing is ever overwritten.
 
 ---
 

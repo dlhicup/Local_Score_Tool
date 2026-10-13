@@ -6,6 +6,8 @@
   "workspaces": ["server", "web"],
   "scripts": {
     "build": "npm -w web run build",
+    "postbuild": "npm run sort-videos",
+    "sort-videos": "npm -w server run sort-videos --",
     "start": "npm -w server run start",
     "proxies": "npm -w server run proxies",
     "dev": "concurrently -n server,web -c green,cyan \"npm -w server run dev\" \"npm -w web run dev\""

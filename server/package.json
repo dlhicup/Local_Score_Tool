@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "proxies": "node scripts/build-proxies.js"
+    "proxies": "node scripts/build-proxies.js",
+    "sort-videos": "node scripts/sort-videos.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
