@@ -407,7 +407,7 @@ in a browser tab instead of saving it.
 | key | action |
 | --- | --- |
 | `Space` | play / pause |
-| `←` `→` | step 2 frames (change it in Settings → Arrow step); hold to keep stepping until you let go |
+| `←` `→` | step one frame (change it in Settings → Arrow step); hold to keep stepping until you let go |
 | `,` `.` | step exactly one frame, to land a mark on its frame; hold works the same way |
 | `⇧` + `←` `→` | jump one second |
 | `1`–`5` | playback speed |

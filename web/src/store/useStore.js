@@ -18,11 +18,11 @@ const DEFAULT_SETTINGS = {
   // One frame at the 25 fps reporting clock.
   nudgeStep: 0.04,
   seekStep: 1,
-  // Frames one press of ← or → moves: enough to get through a play quickly.
-  // , and . always move exactly one, for landing a mark on its frame.
-  arrowStep: 2,
-  // Set once a stored arrow step has been read past the change of default.
-  arrowStepChecked: true,
+  // Frames one press of ← or → moves. One, for frame-accurate marking; more
+  // can be set in Settings. , and . always move exactly one.
+  arrowStep: 1,
+  // Which default a stored arrow step has been checked against.
+  arrowStepDefault: 1,
   // Steps a second while a stepping key is held. Slow enough to read each
   // picture; the decoder can go three times faster, which is too fast to.
   holdStepFps: 10,
@@ -41,12 +41,14 @@ function loadSettings() {
       return migrated;
     }
     const merged = { ...DEFAULT_SETTINGS, ...stored };
-    // The arrow step's default went from 4 frames to 2. A 4 saved before then
-    // is the old default riding along with some other setting, not a choice,
-    // so it becomes 2, once. A 4 picked in Settings afterwards is kept.
-    if (!stored.arrowStepChecked) {
-      if (stored.arrowStep === 4) merged.arrowStep = DEFAULT_SETTINGS.arrowStep;
-      merged.arrowStepChecked = true;
+    // The arrow step's default went 4, then 2, then back to 1. A 4 or 2 saved
+    // before then is an old default riding along with some other setting,
+    // not a choice, so it becomes 1, once. One picked in Settings afterwards
+    // is kept.
+    if (stored.arrowStepDefault !== DEFAULT_SETTINGS.arrowStepDefault) {
+      if (stored.arrowStep === 4 || stored.arrowStep === 2) merged.arrowStep = DEFAULT_SETTINGS.arrowStep;
+      delete merged.arrowStepChecked;
+      merged.arrowStepDefault = DEFAULT_SETTINGS.arrowStepDefault;
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
     }
     return merged;

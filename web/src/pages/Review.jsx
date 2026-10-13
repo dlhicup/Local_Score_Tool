@@ -216,7 +216,7 @@ export default function Review({ mode = 'annotate' }) {
           if (e.repeat) return;
           const dir = e.key === 'ArrowLeft' || e.key === ',' ? -1 : 1;
           // , and . move exactly one frame, for landing a mark on its frame.
-          // A plain arrow moves the arrow step (2 frames unless Settings says
+          // A plain arrow moves the arrow step (1 frame unless Settings says
           // otherwise), for getting through a play; Shift+arrow a second at a
           // time, for covering ground.
           const arrow = e.key.startsWith('Arrow');
